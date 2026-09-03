@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { MODELS, CostMeter, assertUsable } from '../providers/anthropic.js';
+import { isRateLimit } from '../providers/llm/index.js';
+import { CostMeter } from '../providers/anthropic.js';
 import { pool } from '../lib/retry.js';
 import { TRACK, CHANNEL } from '../sheets/schema.js';
 import { log } from '../lib/log.js';
@@ -111,21 +111,16 @@ export function buildDraftUserMessage({ post, lead, track, channel }) {
   ].filter(Boolean).join('\n');
 }
 
-export async function draftOne(client, { post, lead, track, channel, profileText, meter }) {
-  const message = await client.messages.parse({
-    model: MODELS.draft,
-    max_tokens: 4000,
+export async function draftOne(llm, { post, lead, track, channel, profileText, meter }) {
+  const { data, usage, costUsd } = await llm.complete({
     system: buildDraftSystemPrompt(profileText),
-    messages: [{ role: 'user', content: buildDraftUserMessage({ post, lead, track, channel }) }],
-    thinking: { type: 'adaptive' },
-    output_config: { effort: 'high', format: zodOutputFormat(DraftSchema) },
+    prompt: buildDraftUserMessage({ post, lead, track, channel }),
+    schema: DraftSchema,
+    purpose: 'draft',
   });
 
-  assertUsable(message);
-  meter?.record(MODELS.draft, message.usage);
-  if (!message.parsed_output) throw new Error('Draft returned no parsable output');
-
-  return sanitize(message.parsed_output);
+  meter?.add('draft', costUsd, usage);
+  return sanitize(data);
 }
 
 /**
@@ -148,21 +143,31 @@ export function wordCount(text) {
   return String(text ?? '').trim().split(/\s+/).filter(Boolean).length;
 }
 
-export async function draftAll(client, items, profileText, { concurrency = 3, meter = new CostMeter() } = {}) {
+export async function draftAll(llm, items, profileText, { concurrency, meter = new CostMeter() } = {}) {
+  const limit = concurrency ?? llm.defaultConcurrency?.draft ?? 2;
   const drafts = new Map();
   const failures = [];
+  const deferred = [];
 
-  const settled = await pool(items, concurrency, (item) => draftOne(client, { ...item, profileText, meter }));
+  const { results: settled, stopped } = await pool(
+    items, limit,
+    (item) => draftOne(llm, { ...item, profileText, meter }),
+    { stopWhen: isRateLimit },
+  );
 
   settled.forEach((outcome, index) => {
     const item = items[index];
-    if (outcome.ok) drafts.set(item.post.post_id, outcome.value);
+    if (outcome?.ok) drafts.set(item.post.post_id, outcome.value);
+    else if (outcome?.skipped) deferred.push({ post_id: item.post.post_id });
     else failures.push({ post_id: item.post.post_id, title: item.post.title, message: outcome.error.message });
   });
 
-  const long = [...drafts.entries()].filter(([, d]) => wordCount(d.body) > 170);
+  const long = [...drafts.values()].filter((d) => wordCount(d.body) > 170);
   if (long.length) log.warn('drafts over the length target', { count: long.length });
 
-  log.info('drafting complete', { total: items.length, ok: drafts.size, failed: failures.length, cost_usd: meter.total });
-  return { drafts, failures, meter };
+  log.info('drafting complete', {
+    total: items.length, ok: drafts.size, failed: failures.length,
+    deferred: deferred.length, cost_usd: meter.total, backend: llm.name,
+  });
+  return { drafts, failures, deferred, rateLimited: stopped ?? null, meter };
 }

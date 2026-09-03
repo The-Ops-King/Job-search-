@@ -1,69 +1,63 @@
-import Anthropic from '@anthropic-ai/sdk';
-
 /**
- * Classification runs on every new post every day, so it goes to the cheap model.
- * Drafts run only on gated leads and are what a stranger judges Tyler on, so they
- * go to the expensive one. The cost gap is small at this volume; the quality gap
- * on the drafts is not.
+ * Run accounting.
+ *
+ * What the number means depends on the backend, and the difference is not cosmetic:
+ *
+ *   LLM_BACKEND=api          real dollars billed to an Anthropic account
+ *   LLM_BACKEND=claude_code  no bill at all; the figure is the API-list equivalent
+ *                            of the quota the calls consumed, which is the only
+ *                            comparable number Claude Code reports
+ *
+ * On the subscription backend the binding limit is the usage window, not money, so
+ * the cost guard is a volume brake rather than a spending one. The digest says which
+ * backend produced the figure so the number is never read as a bill when it is not.
  */
-export const MODELS = {
-  classify: 'claude-sonnet-5',
-  draft: 'claude-opus-5',
-};
-
-/** USD per million tokens. Used for the Runs estimate and the cost guard. */
-export const PRICING = {
-  'claude-sonnet-5': { input: 2, output: 10 },
-  'claude-opus-5': { input: 5, output: 25 },
-};
-
-export function createAnthropic() {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set');
-  // The SDK retries 429 and 5xx itself with backoff; four tries covers a rate-limit
-  // burst without another retry layer fighting it.
-  return new Anthropic({ maxRetries: 4, timeout: 120000 });
-}
-
 export class CostMeter {
-  constructor() { this.entries = []; }
+  constructor(backend = 'unknown') {
+    this.backend = backend;
+    this.entries = [];
+  }
 
-  record(model, usage) {
-    if (!usage) return;
-    const price = PRICING[model] ?? { input: 0, output: 0 };
-    const input = (usage.input_tokens ?? 0)
-      + (usage.cache_read_input_tokens ?? 0) * 0.1
-      + (usage.cache_creation_input_tokens ?? 0) * 1.25;
-    const usd = (input / 1e6) * price.input + ((usage.output_tokens ?? 0) / 1e6) * price.output;
-    this.entries.push({ model, usd, input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0 });
+  /** One completed model call. `usd` comes from the backend, already computed. */
+  add(label, usd, usage = {}) {
+    this.entries.push({
+      label,
+      usd: Number.isFinite(usd) ? usd : 0,
+      input_tokens: usage.input_tokens ?? 0,
+      output_tokens: usage.output_tokens ?? 0,
+    });
     return usd;
   }
 
+  /** Non-model spend: Apify runs, enrichment lookups. Always real money. */
   addExternal(label, usd) {
-    if (Number.isFinite(usd) && usd > 0) this.entries.push({ model: label, usd });
+    if (Number.isFinite(usd) && usd > 0) this.entries.push({ label, usd, external: true });
   }
 
   get total() {
     return Number(this.entries.reduce((sum, e) => sum + e.usd, 0).toFixed(4));
   }
 
+  /** Real money only, which on the subscription backend excludes model calls. */
+  get billed() {
+    return Number(this.entries.filter((e) => e.external)
+      .reduce((sum, e) => sum + e.usd, 0).toFixed(4));
+  }
+
+  get calls() {
+    return this.entries.filter((e) => !e.external).length;
+  }
+
   breakdown() {
-    const byModel = {};
-    for (const e of this.entries) byModel[e.model] = Number(((byModel[e.model] ?? 0) + e.usd).toFixed(4));
-    return byModel;
+    const byLabel = {};
+    for (const e of this.entries) byLabel[e.label] = Number(((byLabel[e.label] ?? 0) + e.usd).toFixed(4));
+    return byLabel;
   }
-}
 
-export class RefusalError extends Error {
-  constructor(details) {
-    super(`Model declined the request (${details?.category ?? 'unspecified'})`);
-    this.name = 'RefusalError';
-    this.details = details;
+  describe() {
+    return this.backend === 'claude_code'
+      ? `$${this.total.toFixed(2)} quota-equivalent across ${this.calls} calls (no API bill; ` +
+        `$${this.billed.toFixed(2)} of that is real spend on Apify and enrichment)`
+      : `$${this.total.toFixed(2)} across ${this.calls} calls`;
   }
-}
-
-/** Every model response goes through here so a refusal never reads as a parse failure. */
-export function assertUsable(message) {
-  if (message.stop_reason === 'refusal') throw new RefusalError(message.stop_details);
-  if (message.stop_reason === 'max_tokens') throw new Error('Response hit max_tokens before completing');
-  return message;
 }

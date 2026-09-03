@@ -34,21 +34,37 @@ export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Runs tasks with bounded concurrency, preserving input order in the result array.
- * Never rejects: each slot resolves to { ok: true, value } or { ok: false, error }.
+ * Never rejects: each slot resolves to { ok: true, value }, { ok: false, error },
+ * or { ok: false, skipped: true } for work abandoned after a stop condition.
+ *
+ * `stopWhen(error)` ends the batch early. It exists for usage limits: once the
+ * account is out of quota every remaining call fails too, so continuing wastes
+ * minutes and teaches nothing.
  */
-export async function pool(items, limit, worker) {
+export async function pool(items, limit, worker, { stopWhen = () => false } = {}) {
   const results = new Array(items.length);
   let cursor = 0;
+  let stopped = null;
+
   const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (cursor < items.length) {
       const index = cursor++;
+      if (stopped) {
+        results[index] = { ok: false, skipped: true, error: stopped };
+        continue;
+      }
       try {
         results[index] = { ok: true, value: await worker(items[index], index) };
       } catch (error) {
         results[index] = { ok: false, error };
+        if (stopWhen(error)) {
+          stopped = error;
+          log.warn('batch stopped early', { at: index, of: items.length, reason: error.message });
+        }
       }
     }
   });
+
   await Promise.all(runners);
-  return results;
+  return { results, stopped };
 }

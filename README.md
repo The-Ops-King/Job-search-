@@ -18,8 +18,10 @@ up from it. Re-running the same day adds no rows and sends no second email.
 
 ```bash
 npm install
-cp .env.example .env      # fill it in
-npm run setup-sheet       # creates tabs, headers, checkboxes, Config defaults
+npm install -g @anthropic-ai/claude-code   # the default model backend
+claude setup-token                         # long-lived token, needs a Claude subscription
+cp .env.example .env                       # paste the token, fill in the rest
+npm run setup-sheet                        # creates tabs, headers, checkboxes, Config defaults
 npm test
 npm run run-once -- --skip-send
 ```
@@ -57,6 +59,55 @@ before a scheduled run does.
 swapping an actor or fixing a mapping is a config edit rather than a code change. When
 a mapping stops resolving a required field the source fails loudly: it is named in the
 Runs row and in the digest instead of quietly returning fewer results.
+
+## The model backend
+
+Two backends, one environment variable, no other code difference.
+
+**`LLM_BACKEND=claude_code`** (default) runs the model through headless Claude Code
+on a Claude subscription. No separate API bill. Set `CLAUDE_CODE_OAUTH_TOKEN` from
+`claude setup-token`.
+
+**`LLM_BACKEND=api`** uses the Anthropic Messages API and needs `ANTHROPIC_API_KEY`.
+It bills separately, and in exchange the API enforces the JSON schema server-side
+rather than the validate-and-retry loop the subscription route uses. If
+classification reliability ever becomes the bottleneck, this is the switch.
+
+Measured on the subscription route, per classified post: **about $0.015 of
+quota-equivalent and four seconds**. A first run over a 14-day lookback is a few
+hundred posts, so budget roughly $7 of quota once, then well under $1 a day.
+
+Two things about the subscription route are worth knowing before you rely on it.
+
+The invocation passes `--tools ""`. Claude Code ships its tool definitions in every
+request, and on a trivial prompt that measured 26,438 input tokens per call against
+509 with tools stripped. On a workload that makes one call per job posting, that flag
+is the difference between viable and not. It also never passes `--bare`, which forces
+API-key-only auth and never reads the OAuth credentials a subscription uses.
+
+The binding limit is your usage window, not money. When a run hits it, classification
+stops, the remaining posts stay `pending`, and the digest says how many were deferred.
+Nothing is lost and the next run picks them up. On a first run over a large backlog,
+expect this to happen and expect the backlog to clear over two or three days.
+
+## The pre-filter
+
+Postings are rejected on compensation and on obviously unrelated titles before any
+model call happens.
+
+The compensation half is not a heuristic. It calls `checkCompensation`, the same
+function `score.js` uses for rule 3, which reads nothing from the classification and
+so can run early with an identical verdict. A post dropped here gets the reason it
+would have got afterwards, and a test asserts the two can never disagree.
+
+The title half is a heuristic and is deliberately narrow. Terms match on word
+boundaries, not substrings, because an earlier substring version matched "Serverless
+Platform Engineer" against the restaurant term "server" and would have silently
+dropped the lead. A wrong entry costs a lead that never reaches the sheet; a missing
+entry costs about a cent. Anything borderline goes to the model.
+
+Set `Config.prefilter_enabled` to `FALSE` to send everything to the model, which is
+how you prove the pre-filter is not the reason something went missing.
 
 ## The sheet
 
@@ -126,15 +177,18 @@ the next one.
 
 ## Cost control
 
-Four separate limits, all editable in the Config tab:
+Four limits, all editable in the Config tab:
 
 - `max_items_per_query` bounds what the actors return
 - `max_enrichments_per_run` bounds vendor spend on a bad query day
 - `max_daily_cost` stops the run before enrichment if the estimate is already over
 - `max_sends_per_day` bounds outbound volume
 
-The Runs row records an estimate covering Anthropic tokens, Apify run cost and
-enrichment. It is an estimate; treat the vendor dashboards as authoritative.
+`api_cost_estimate` in the Runs row means different things per backend, and the digest
+says which. On `api` it is real dollars. On `claude_code` there is no bill at all and
+the figure is the API-list equivalent of the quota consumed, which is the only
+comparable number available; the real money in that row is Apify plus enrichment.
+Either way it is an estimate, and the vendor dashboards are authoritative.
 
 ## Layout
 
@@ -161,7 +215,12 @@ Three things differ from the original spec, each for a stated reason:
    cross-posts are caught across runs rather than only within one. `last_classified_run`
    distinguishes a stale classification from a fresh one. `comp_flags` carries
    `comp_unknown` without polluting `fit_reasons`.
+4. **Headless Claude Code as the default model backend**, so the pipeline runs on an
+   existing Claude subscription instead of a second bill. The Messages API backend is
+   complete and one environment variable away.
+5. **A pre-filter stage** between normalize and classify, described above.
 
 Sampling parameters were removed from current Claude models, so the classifier is not
-run at temperature 0. Determinism comes from an API-enforced JSON schema plus a fixed
-prompt, which is a stronger guarantee than temperature ever was.
+run at temperature 0. Determinism comes from the JSON schema plus a fixed prompt,
+enforced server-side on the API backend and validated with zod on the subscription
+backend.

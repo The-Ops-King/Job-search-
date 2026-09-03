@@ -6,7 +6,8 @@ import { dirname, join } from 'node:path';
 
 import { createSheetsClient } from '../src/sheets/client.js';
 import { STATUS } from '../src/sheets/schema.js';
-import { createAnthropic, CostMeter } from '../src/providers/anthropic.js';
+import { CostMeter } from '../src/providers/anthropic.js';
+import { getLlm } from '../src/providers/llm/index.js';
 import { classifyAll } from '../src/pipeline/classify.js';
 import { scorePost } from '../src/pipeline/score.js';
 import { log } from '../src/lib/log.js';
@@ -93,9 +94,10 @@ const queue = candidates.map((row) => ({
   _previousScore: row.fit_score,
 }));
 
-const meter = new CostMeter();
-const anthropic = createAnthropic();
-const { results, failures } = await classifyAll(anthropic, queue, profile, { concurrency: 5, meter });
+const backend = process.env.LLM_BACKEND || 'claude_code';
+const meter = new CostMeter(backend);
+const llm = getLlm(backend);
+const { results, failures, deferred, rateLimited } = await classifyAll(llm, queue, profile, { meter });
 
 const updates = [];
 const changes = [];
@@ -134,7 +136,12 @@ for (const post of queue) {
 if (!dryRun && updates.length) await store.update('Posts', updates);
 
 process.stdout.write(`\nReplayed ${updates.length} rows${dryRun ? ' (dry run, nothing written)' : ''}.\n`);
-process.stdout.write(`Cost: $${meter.total.toFixed(2)}. Failures: ${failures.length}.\n\n`);
+process.stdout.write(`Cost: ${meter.describe()}. Failures: ${failures.length}.\n`);
+if (rateLimited) {
+  process.stdout.write(
+    `\nUsage limit reached. ${deferred.length} rows were not re-classified; re-run replay to finish them.\n`);
+}
+process.stdout.write('\n');
 
 if (!changes.length) {
   process.stdout.write('No verdicts changed.\n');

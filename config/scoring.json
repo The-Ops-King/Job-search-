@@ -9,6 +9,10 @@
   "lookback_days": 2,
   "first_run_lookback_days": 14,
   "max_items_per_query": 50,
-  "near_dupe_sources": ["linkedin", "indeed"],
-  "pause": false
+  "near_dupe_sources": [
+    "linkedin",
+    "indeed"
+  ],
+  "pause": false,
+  "prefilter_enabled": true
 }

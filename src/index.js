@@ -5,7 +5,8 @@ import { dirname, join } from 'node:path';
 import { createSheetsClient, LockHeldError } from './sheets/client.js';
 import { STATUS, EMAIL_STATUS, CHANNEL } from './sheets/schema.js';
 import { createApifyClient } from './lib/apify.js';
-import { createAnthropic, CostMeter } from './providers/anthropic.js';
+import { CostMeter } from './providers/anthropic.js';
+import { getLlm } from './providers/llm/index.js';
 import { createGmailClient } from './providers/gmail.js';
 import { runId as makeRunId } from './lib/hash.js';
 import { log, ErrorCollector } from './lib/log.js';
@@ -16,6 +17,7 @@ import * as indeed from './sources/indeed.js';
 
 import { dedupe, crossPostAnnotations, duplicateRows } from './pipeline/dedupe.js';
 import { classifyAll } from './pipeline/classify.js';
+import { prefilter, prefilterPatches } from './pipeline/prefilter.js';
 import { scorePost } from './pipeline/score.js';
 import { enrichLeads } from './pipeline/enrich.js';
 import { draftAll } from './pipeline/draft.js';
@@ -25,14 +27,19 @@ import { buildDigest, sendDigest } from './pipeline/digest.js';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCES = { upwork, linkedin, indeed };
 
-const REQUIRED_ENV = ['ANTHROPIC_API_KEY', 'APIFY_TOKEN', 'GOOGLE_SERVICE_ACCOUNT_JSON', 'SHEET_ID'];
+const REQUIRED_ENV = ['APIFY_TOKEN', 'GOOGLE_SERVICE_ACCOUNT_JSON', 'SHEET_ID'];
 
 /**
  * Checked before anything is written. A missing key found halfway through leaves
  * posts in the sheet and no Runs row explaining why the run stopped.
+ *
+ * Which model credential is required depends on the backend: the subscription route
+ * needs a Claude Code token, the API route needs an API key.
  */
 export function preflight(env = process.env) {
-  const missing = REQUIRED_ENV.filter((key) => !env[key]);
+  const backend = env.LLM_BACKEND || 'claude_code';
+  const modelKey = backend === 'api' ? 'ANTHROPIC_API_KEY' : 'CLAUDE_CODE_OAUTH_TOKEN';
+  const missing = [...REQUIRED_ENV, modelKey].filter((key) => !env[key]);
   if (missing.length) {
     throw new Error(
       `Missing required environment variable(s): ${missing.join(', ')}. ` +
@@ -40,7 +47,7 @@ export function preflight(env = process.env) {
   }
   const optional = ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN', 'GMAIL_FROM']
     .filter((key) => !env[key]);
-  return { gmailConfigured: optional.length === 0, missingOptional: optional };
+  return { backend, gmailConfigured: optional.length === 0, missingOptional: optional };
 }
 
 export async function loadConfigFiles(root = ROOT) {
@@ -65,11 +72,11 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
   const startedAt = new Date().toISOString();
   const errors = new ErrorCollector();
   const warnings = [];
-  const meter = new CostMeter();
-  const counts = { new_posts: 0, classified: 0, gated: 0, enriched: 0, drafted: 0, sent: 0 };
+  const meter = new CostMeter(backend);
+  const counts = { new_posts: 0, prefiltered: 0, classified: 0, gated: 0, enriched: 0, drafted: 0, sent: 0 };
   const sourceStats = {};
 
-  const { gmailConfigured, missingOptional } = preflight();
+  const { backend, gmailConfigured, missingOptional } = preflight();
   if (!gmailConfigured) {
     warnings.push(
       `Gmail is not configured (${missingOptional.join(', ')} not set). Nothing will be sent ` +
@@ -194,16 +201,39 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
         description: descriptions.get(String(row.post_id)) ?? '',
       }));
 
-      const anthropic = createAnthropic();
-      const { results: classifications, failures: classifyFailures } =
-        await classifyAll(anthropic, queue, files.profile, { concurrency: 5, meter });
+      // Reject on money and on obviously-unrelated titles before spending a call.
+      // The compensation half of this is the same function scorePost uses, so a post
+      // dropped here gets the identical verdict it would have got afterwards.
+      // Config.prefilter_enabled = FALSE sends everything to the model. Useful for
+      // proving the pre-filter is not the reason a lead went missing.
+      const { keep: toClassify, rejected: prefiltered } = config.prefilter_enabled === false
+        ? { keep: queue, rejected: [] }
+        : prefilter(queue, config);
+      counts.prefiltered = prefiltered.length;
+      if (prefiltered.length) {
+        await store.update('Posts', prefilterPatches(prefiltered, runIdValue));
+        warnings.push(
+          `Pre-filter rejected ${prefiltered.length} of ${queue.length} posts before ` +
+          `classification, saving that many model calls.`);
+      }
+
+      const llm = getLlm(backend);
+      const { results: classifications, failures: classifyFailures, deferred: classifyDeferred, rateLimited } =
+        await classifyAll(llm, toClassify, files.profile, { meter });
       counts.classified = classifications.size;
       for (const f of classifyFailures) errors.add('classify', new Error(f.message), { post_id: f.post_id });
+
+      if (rateLimited) {
+        warnings.push(
+          `Claude usage limit reached during classification. ${classifyDeferred.length} posts ` +
+          `were left unclassified; they stay pending and are picked up on the next run. ` +
+          `Nothing was lost.`);
+      }
 
       // --- score ----------------------------------------------------------
       const postUpdates = [];
 
-      for (const post of queue) {
+      for (const post of toClassify) {
         const classification = classifications.get(post.post_id);
         if (!classification) continue; // stays pending, retried next run
 
@@ -234,11 +264,12 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
       const maxDailyCost = Number(config.max_daily_cost ?? 12);
       if (meter.total > maxDailyCost) {
         costGuardTripped = true;
+        const unit = backend === 'claude_code' ? 'quota-equivalent' : 'spent';
         warnings.push(
-          `Cost guard: $${meter.total.toFixed(2)} already spent this run exceeds max_daily_cost ` +
-          `of $${maxDailyCost.toFixed(2)}. Stopped before enrichment. Posts and scores were written; ` +
+          `Cost guard: $${meter.total.toFixed(2)} ${unit} this run exceeds max_daily_cost of ` +
+          `$${maxDailyCost.toFixed(2)}. Stopped before enrichment. Posts and scores were written; ` +
           `nothing was enriched, drafted or sent.`);
-        log.warn('cost guard tripped', { spent: meter.total, cap: maxDailyCost });
+        log.warn('cost guard tripped', { spent: meter.total, cap: maxDailyCost, backend });
       }
 
       // --- enrich ---------------------------------------------------------
@@ -299,10 +330,15 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
             channel: l.channel ?? CHANNEL.MANUAL_APPLY,
           }));
 
-        const { drafts, failures: draftFailures } =
-          await draftAll(anthropic, needDrafts, files.profile, { concurrency: 3, meter });
+        const { drafts, failures: draftFailures, rateLimited: draftLimited } =
+          await draftAll(llm, needDrafts, files.profile, { meter });
         counts.drafted = drafts.size;
         for (const f of draftFailures) errors.add('draft', new Error(f.message), { post_id: f.post_id });
+        if (draftLimited) {
+          warnings.push(
+            'Claude usage limit reached during drafting. Leads without a draft get one ' +
+            'on the next run; their Leads rows are already written.');
+        }
 
         const outreachRows = needDrafts
           .filter((item) => drafts.has(item.post.post_id))

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { MODELS, CostMeter, assertUsable } from '../providers/anthropic.js';
+import { isRateLimit } from '../providers/llm/index.js';
+import { CostMeter } from '../providers/anthropic.js';
 import { pool } from '../lib/retry.js';
 import { log } from '../lib/log.js';
 
@@ -8,9 +8,10 @@ import { log } from '../lib/log.js';
  * One call per new post. The rubric in config/profile.md is passed verbatim as the
  * system prompt so the model scores against intent rather than keyword overlap.
  *
- * The output schema is enforced by the API, not by prompting. Sampling parameters
- * were removed from current models, so determinism comes from the schema plus a
- * fixed prompt rather than from temperature.
+ * The output schema is the contract. On the API backend the server enforces it; on
+ * the Claude Code backend it is rendered into the prompt and validated with zod,
+ * with one corrective retry. Sampling parameters were removed from current models,
+ * so determinism comes from the schema plus a fixed prompt, not from temperature.
  */
 
 export const HARD_OUTS = [
@@ -82,45 +83,49 @@ export function buildUserMessage(post) {
   ].join('\n');
 }
 
-export async function classifyPost(client, post, profileText, meter) {
-  const message = await client.messages.parse({
-    model: MODELS.classify,
-    max_tokens: 4000,
+export async function classifyPost(llm, post, profileText, meter) {
+  const { data, usage, costUsd } = await llm.complete({
     system: buildSystemPrompt(profileText),
-    messages: [{ role: 'user', content: buildUserMessage(post) }],
-    thinking: { type: 'adaptive' },
-    output_config: {
-      effort: 'medium',
-      format: zodOutputFormat(ClassificationSchema),
-    },
+    prompt: buildUserMessage(post),
+    schema: ClassificationSchema,
+    purpose: 'classify',
   });
 
-  assertUsable(message);
-  meter?.record(MODELS.classify, message.usage);
-
-  if (!message.parsed_output) throw new Error('Classifier returned no parsable output');
-  return message.parsed_output;
+  meter?.add('classify', costUsd, usage);
+  return data;
 }
 
 /**
  * Classifies a batch with bounded concurrency. Never throws: a post that fails stays
  * status=pending so the next run retries it, and the failure is reported.
+ *
+ * A usage-limit error stops the batch. Everything after it is reported as deferred
+ * rather than failed, because nothing was wrong with those posts and they will be
+ * picked up unchanged on the next run.
  */
-export async function classifyAll(client, posts, profileText, { concurrency = 5, meter = new CostMeter() } = {}) {
+export async function classifyAll(llm, posts, profileText, { concurrency, meter = new CostMeter() } = {}) {
+  const limit = concurrency ?? llm.defaultConcurrency?.classify ?? 3;
   const results = new Map();
   const failures = [];
+  const deferred = [];
 
-  const settled = await pool(posts, concurrency, (post) => classifyPost(client, post, profileText, meter));
+  const { results: settled, stopped } = await pool(
+    posts, limit,
+    (post) => classifyPost(llm, post, profileText, meter),
+    { stopWhen: isRateLimit },
+  );
 
   settled.forEach((outcome, index) => {
     const post = posts[index];
-    if (outcome.ok) results.set(post.post_id, outcome.value);
+    if (outcome?.ok) results.set(post.post_id, outcome.value);
+    else if (outcome?.skipped) deferred.push({ post_id: post.post_id, title: post.title });
     else failures.push({ post_id: post.post_id, title: post.title, message: outcome.error.message });
   });
 
   log.info('classification complete', {
-    total: posts.length, ok: results.size, failed: failures.length, cost_usd: meter.total,
+    total: posts.length, ok: results.size, failed: failures.length,
+    deferred: deferred.length, cost_usd: meter.total, backend: llm.name,
   });
 
-  return { results, failures, meter };
+  return { results, failures, deferred, rateLimited: stopped ?? null, meter };
 }

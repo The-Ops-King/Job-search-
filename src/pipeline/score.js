@@ -19,6 +19,60 @@ export function fitScore(capability, ownership) {
 
 const clamp = (n) => Math.min(10, Math.max(0, Number(n) || 0));
 
+/**
+ * Rule 3 in isolation.
+ *
+ * This is the one rule that does not read the classification at all, which means it
+ * can run before the model does. prefilter.js uses it to reject on money without
+ * spending a call, and scorePost uses it in sequence. Same function, same verdict,
+ * so the two can never drift apart.
+ *
+ * Returns { rejected, reason, flags }.
+ */
+export function checkCompensation(post, config) {
+  const flags = [];
+  const top = firstNumber(post.comp_max, post.comp_min);
+  const type = post.comp_type;
+  const no = (reason) => ({ rejected: true, reason, flags });
+  const ok = (note) => ({ rejected: false, reason: null, flags, note });
+
+  if (type === 'salary') {
+    if (top === null) { flags.push(COMP_FLAG.UNKNOWN); return ok(); }
+    if (top < config.salary_floor_annual) {
+      return no(`salary ${fmt(top)} is below the ${fmt(config.salary_floor_annual)} floor`);
+    }
+    return ok();
+  }
+
+  if (type === 'hourly') {
+    if (top === null) { flags.push(COMP_FLAG.UNKNOWN); return ok(); }
+    if (top < config.hourly_floor) {
+      return no(`hourly ${fmt(top)} is below the ${fmt(config.hourly_floor)} floor`);
+    }
+    return ok();
+  }
+
+  if (type === 'fixed') {
+    const hours = Number(post.est_hours);
+    if (top === null) { flags.push(COMP_FLAG.UNKNOWN); return ok(); }
+    if (Number.isFinite(hours) && hours > 0) {
+      const implied = top / hours;
+      if (implied < config.fixed_price_hourly_floor) {
+        return no(
+          `fixed ${fmt(top)} over ${hours}h implies ${fmt(Math.round(implied))}/hr, ` +
+          `below the ${fmt(config.fixed_price_hourly_floor)} floor`);
+      }
+      return ok(`fixed budget implies ~${fmt(Math.round(implied))}/hr`);
+    }
+    // Fixed price with no hour estimate: no way to imply a rate, so it passes.
+    flags.push(COMP_FLAG.UNKNOWN);
+    return ok();
+  }
+
+  flags.push(COMP_FLAG.UNKNOWN);
+  return ok();
+}
+
 export function scorePost(post, classification, config) {
   const reasons = [];
   const flags = [];
@@ -44,38 +98,10 @@ export function scorePost(post, classification, config) {
   }
 
   // 3. Compensation floors.
-  const top = firstNumber(post.comp_max, post.comp_min);
-  const type = post.comp_type;
-
-  if (type === 'salary') {
-    if (top === null) flags.push(COMP_FLAG.UNKNOWN);
-    else if (top < config.salary_floor_annual) {
-      return reject(`salary ${fmt(top)} is below the ${fmt(config.salary_floor_annual)} floor`);
-    }
-  } else if (type === 'hourly') {
-    if (top === null) flags.push(COMP_FLAG.UNKNOWN);
-    else if (top < config.hourly_floor) {
-      return reject(`hourly ${fmt(top)} is below the ${fmt(config.hourly_floor)} floor`);
-    }
-  } else if (type === 'fixed') {
-    const hours = Number(post.est_hours);
-    if (top === null) {
-      flags.push(COMP_FLAG.UNKNOWN);
-    } else if (Number.isFinite(hours) && hours > 0) {
-      const implied = top / hours;
-      if (implied < config.fixed_price_hourly_floor) {
-        return reject(
-          `fixed ${fmt(top)} over ${hours}h implies ${fmt(Math.round(implied))}/hr, ` +
-          `below the ${fmt(config.fixed_price_hourly_floor)} floor`);
-      }
-      reasons.push(`fixed budget implies ~${fmt(Math.round(implied))}/hr`);
-    } else {
-      // Fixed price with no hour estimate: no way to imply a rate, so it passes.
-      flags.push(COMP_FLAG.UNKNOWN);
-    }
-  } else {
-    flags.push(COMP_FLAG.UNKNOWN);
-  }
+  const comp = checkCompensation(post, config);
+  flags.push(...comp.flags);
+  if (comp.rejected) return reject(comp.reason);
+  if (comp.note) reasons.push(comp.note);
 
   // 4. Fit gate.
   const score = fitScore(classification?.capability_match, classification?.ownership_match);
