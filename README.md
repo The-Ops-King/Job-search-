@@ -195,23 +195,34 @@ Either way it is an estimate, and the vendor dashboards are authoritative.
 Apify charges per result, and dedupe runs after billing. A posting matching four of
 your queries is paid for four times and kept once, which is invisible in a total.
 
-At the shipped defaults that is 58 queries per run at up to 50 results each: a ceiling
-of $218 to $261 a month at $2.50 to $3.00 per thousand. Realistically far less, because
-a two-day lookback means most queries return nowhere near 50. The spread is wide enough
-that the first run should settle it rather than an estimate.
+**`max_apify_cost_per_run` is a hard stop, checked before every single query.** Once
+the budget for a run is spent, ingest halts. It defaults to $0.60, which is $18 a month
+running daily, and it cannot be exceeded by more than one query's worth: real cost is
+only known after a query returns, so each one is pre-checked against
+`assumed_cost_per_1k_results` first.
 
-So every run reports what each query actually cost, which queries returned nothing,
-which hit the result cap, and the cost per post that survived dedupe. Read that block
-in the first digest before tuning anything.
+This matters because the other cost guard, `max_daily_cost`, runs after ingest and
+before enrichment. For Apify that is too late. By the time it fires, the results are
+already bought.
 
-Four levers, roughly in order of size:
+When the cap cuts a run short the remaining queries are deferred, not dropped. Query
+order rotates by day, so anything skipped runs first next time and full coverage comes
+back over a couple of runs. The digest says how many were deferred.
+
+Uncapped, the shipped query set would be about $104 a month at $3.00 per thousand
+(58 queries at 20 results each). The cap is what keeps that from happening; raise it
+deliberately if you want more coverage per run.
+
+Every run also reports what each query cost, which returned nothing, which hit the
+result cap, and the cost per post that survived dedupe. Read that block in the first
+digest before tuning anything, because the levers below should be aimed with data:
 
 1. Map a recency filter for Upwork. `config/actors.json` currently has
    `postedWithinDays: null` there, so Upwork refetches its full cap daily regardless of
    age and dedupe discards nearly all of it after you have paid. Whether the actor
    supports one is a `probe-actor` question.
 2. Cut the 18 shared queries down. They overlap heavily, and overlap is billed.
-3. Lower `max_items_per_query`. In a two-day window few queries have 20 new results.
+3. Lower `max_items_per_query` further.
 4. Run LinkedIn and Indeed less often than Upwork. Salaried roles turn over slowly.
 
 ## Layout

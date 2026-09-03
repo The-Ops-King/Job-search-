@@ -7,7 +7,7 @@ export function queriesFor(queryConfig) {
   return [...queryConfig.shared];
 }
 
-export async function fetch({ client, actorConfig, queryConfig, options, now }) {
+export async function fetch({ client, actorConfig, queryConfig, options, now, budget, rotation }) {
   return collect({
     source: name,
     client,
@@ -15,5 +15,7 @@ export async function fetch({ client, actorConfig, queryConfig, options, now }) 
     queries: queriesFor(queryConfig),
     options: { ...options, remote: true },
     now,
+    budget,
+    rotation,
   });
 }

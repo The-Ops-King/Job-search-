@@ -11,7 +11,7 @@ export function queriesFor(queryConfig) {
   return [...queryConfig.shared, ...queryConfig.upwork_only];
 }
 
-export async function fetch({ client, actorConfig, queryConfig, options, now }) {
+export async function fetch({ client, actorConfig, queryConfig, options, now, budget, rotation }) {
   return collect({
     source: name,
     client,
@@ -19,5 +19,7 @@ export async function fetch({ client, actorConfig, queryConfig, options, now }) 
     queries: queriesFor(queryConfig),
     options: { ...options, remote: false },
     now,
+    budget,
+    rotation,
   });
 }

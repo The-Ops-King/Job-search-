@@ -8,11 +8,13 @@
   "max_daily_cost": 12.0,
   "lookback_days": 2,
   "first_run_lookback_days": 14,
-  "max_items_per_query": 50,
+  "max_items_per_query": 20,
   "near_dupe_sources": [
     "linkedin",
     "indeed"
   ],
   "pause": false,
-  "prefilter_enabled": true
+  "prefilter_enabled": true,
+  "max_apify_cost_per_run": 0.6,
+  "assumed_cost_per_1k_results": 3.0
 }

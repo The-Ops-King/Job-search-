@@ -1,5 +1,6 @@
 import { runActor } from '../lib/apify.js';
 import { normalizeAll, filterByRecency } from './normalize.js';
+import { rotateQueries } from '../lib/budget.js';
 import { log } from '../lib/log.js';
 
 /**
@@ -28,19 +29,32 @@ export function buildInput(actorConfig, { query, maxItems, remote, postedWithinD
  * query is recorded and skipped; the source only fails outright when every query
  * fails or when the actor output no longer matches the mapping.
  */
-export async function collect({ source, client, actorConfig, queries, options, now = new Date() }) {
+export async function collect({ source, client, actorConfig, queries, options, now = new Date(), budget = null, rotation = 0 }) {
   const { maxItems, lookbackDays, remote = true, timeoutSecs } = options;
   const rawItems = [];
   const queryErrors = [];
   const metas = [];
   const queryStats = [];
+  const skippedForBudget = [];
 
-  for (const query of queries) {
+  // Rotated so a budget cut-off does not starve the same tail queries every day.
+  const ordered = rotateQueries(queries, rotation);
+
+  for (const query of ordered) {
+    // Checked before the call, because Apify bills on results returned. Checking
+    // afterwards, which is what the old cost guard did, is checking after paying.
+    if (budget && !budget.canAfford()) {
+      budget.skip();
+      skippedForBudget.push(query);
+      continue;
+    }
+
     const input = buildInput(actorConfig, { query, maxItems, remote, postedWithinDays: lookbackDays });
     try {
       const { items, meta } = await runActor(client, actorConfig.actorId, input, { timeoutSecs });
       rawItems.push(...items);
       metas.push(meta);
+      budget?.record(meta.costUsd, { source, query });
 
       // Apify bills per result, per query, and dedupe runs afterwards. A posting
       // matching several queries is paid for several times, so knowing what each
@@ -57,7 +71,8 @@ export async function collect({ source, client, actorConfig, queries, options, n
     }
   }
 
-  if (queryErrors.length === queries.length && queries.length > 0) {
+  const attempted = ordered.length - skippedForBudget.length;
+  if (attempted > 0 && queryErrors.length === attempted) {
     throw new Error(
       `${source}: all ${queries.length} queries failed against ${actorConfig.actorId}. ` +
       `First error: ${queryErrors[0].message}`);
@@ -77,14 +92,19 @@ export async function collect({ source, client, actorConfig, queries, options, n
       rawItems: rawItems.length,
       droppedMalformed: dropped,
       droppedStale: stale,
-      queriesRun: queries.length - queryErrors.length,
+      queriesRun: attempted - queryErrors.length,
       queriesFailed: queryErrors.length,
+      queriesSkippedForBudget: skippedForBudget.length,
       queryStats,
       inventory,
     },
     warnings: [
       ...warnings,
       ...queryErrors.map((e) => `${source}: query "${e.query}" failed: ${e.message}`),
+      ...(skippedForBudget.length
+        ? [`${source}: ${skippedForBudget.length} queries skipped, Apify budget for this run is spent. ` +
+           `Query order rotates daily, so these run first next time.`]
+        : []),
     ],
   };
 }

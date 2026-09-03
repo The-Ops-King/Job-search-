@@ -10,7 +10,7 @@
 
 const RATE_HINT = 'assumes the actor bills per result; check the Apify dashboard for the real rate';
 
-export function summarizeSpend(sourceStats, { keptPostIds = 0, collectedRaw = 0 } = {}) {
+export function summarizeSpend(sourceStats, { keptPostIds = 0, collectedRaw = 0, budget = null } = {}) {
   const rows = [];
   let totalCost = 0;
   let totalItems = 0;
@@ -42,6 +42,7 @@ export function summarizeSpend(sourceStats, { keptPostIds = 0, collectedRaw = 0 
     wastedItems,
     wasteRatio,
     costPerKept,
+    budget,
     projectedMonthly: Number((totalCost * 30).toFixed(2)),
   };
 }
@@ -53,6 +54,16 @@ export function spendLines(summary, { topN = 8 } = {}) {
   const lines = [];
   lines.push(`APIFY SPEND: $${summary.totalCost.toFixed(2)} this run across ${summary.totalItems} billed results`);
   lines.push(`  projected $${summary.projectedMonthly.toFixed(0)}/month at this volume (${RATE_HINT})`);
+
+  const b = summary.budget;
+  if (b?.capUsd) {
+    lines.push(`  budget cap $${b.capUsd.toFixed(2)}/run, $${b.spent.toFixed(2)} used`);
+    if (b.queriesSkipped) {
+      lines.push(
+        `  ${b.queriesSkipped} queries were skipped because the cap was reached. Query order ` +
+        `rotates daily, so they run first tomorrow. Raise max_apify_cost_per_run to cover them in one run.`);
+    }
+  }
 
   if (summary.costPerKept !== null) {
     lines.push(

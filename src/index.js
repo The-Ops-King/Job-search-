@@ -9,6 +9,7 @@ import { CostMeter } from './providers/anthropic.js';
 import { getLlm } from './providers/llm/index.js';
 import { createGmailClient } from './providers/gmail.js';
 import { runId as makeRunId } from './lib/hash.js';
+import { RunBudget, dayIndex } from './lib/budget.js';
 import { log, ErrorCollector } from './lib/log.js';
 
 import * as upwork from './sources/upwork.js';
@@ -110,6 +111,7 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
   let enrichedLeads = [];
   let fatal = null;
   let collectedRaw = 0;
+  let budget = null;
 
   try {
     try {
@@ -130,6 +132,16 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
       const apify = createApifyClient();
       const collected = [];
 
+      // A hard ceiling checked before every query. Apify bills per result, so a cap
+      // applied after ingest is a cap applied after paying.
+      budget = new RunBudget({
+        capUsd: Number(config.max_apify_cost_per_run ?? 0.6),
+        assumedCostPer1k: Number(config.assumed_cost_per_1k_results ?? 3.0),
+        maxItemsPerQuery: Number(config.max_items_per_query ?? 20),
+      });
+      const rotation = dayIndex();
+      log.info('apify budget', { cap_usd: budget.capUsd, rotation });
+
       for (const [name, source] of Object.entries(SOURCES)) {
         const actorConfig = files.actors[name];
         try {
@@ -139,10 +151,12 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
             actorConfig,
             queryConfig: files.queries,
             options: {
-              maxItems: Number(config.max_items_per_query ?? 50),
+              maxItems: Number(config.max_items_per_query ?? 20),
               lookbackDays,
               timeoutSecs: Number(config.actor_timeout_secs ?? 300),
             },
+            budget,
+            rotation,
           });
           collected.push(...result.posts);
           warnings.push(...result.warnings);
