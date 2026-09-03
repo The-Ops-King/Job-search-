@@ -1,0 +1,26 @@
+{
+  "name": "opportunity-finder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup-sheet": "node scripts/setup-sheet.js",
+    "run-once": "node scripts/run-once.js",
+    "replay": "node scripts/replay.js",
+    "probe-actor": "node scripts/probe-actor.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.123.0",
+    "apify-client": "^2.25.0",
+    "dotenv": "^17.4.2",
+    "googleapis": "^178.0.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}

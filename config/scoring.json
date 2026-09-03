@@ -1,0 +1,14 @@
+{
+  "salary_floor_annual": 120000,
+  "hourly_floor": 100,
+  "fixed_price_hourly_floor": 100,
+  "fit_score_gate": 7,
+  "max_sends_per_day": 15,
+  "max_enrichments_per_run": 25,
+  "max_daily_cost": 12.0,
+  "lookback_days": 2,
+  "first_run_lookback_days": 14,
+  "max_items_per_query": 50,
+  "near_dupe_sources": ["linkedin", "indeed"],
+  "pause": false
+}

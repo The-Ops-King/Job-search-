@@ -1,0 +1,111 @@
+{
+  "_README": [
+    "Every actorId and every field name below is UNVERIFIED. apify.com was unreachable",
+    "from the environment this was built in, so nothing here was checked against a live",
+    "actor. Run `npm run probe-actor -- <source>` with APIFY_TOKEN set: it runs the actor",
+    "once, saves the raw dataset to .probe/, and prints the real field inventory.",
+    "Then correct `input.fields` and `map` here. No code change is needed for a remap.",
+    "",
+    "input.fields maps our canonical knob -> the actor's own input key. null means the",
+    "actor does not support that knob; the pipeline filters client-side where it can.",
+    "map values are ordered candidate paths (dot notation, [n] for array index). The first",
+    "path that yields a non-empty value wins, so listing several variants keeps a run alive",
+    "through minor actor changes. A miss on a `required` field aborts that source loudly."
+  ],
+  "upwork": {
+    "actorId": "devcake/upwork-jobs-scraper",
+    "verified": false,
+    "alternates": ["chronometrica/upwork-job-scraper", "josrade/upwork-jobs-scraper", "neatrat/upwork-job-scraper"],
+    "input": {
+      "template": {},
+      "fields": {
+        "query": "searchQuery",
+        "maxItems": "maxItems",
+        "remote": null,
+        "postedWithinDays": null
+      }
+    },
+    "map": {
+      "url": ["url", "jobUrl", "link", "jobLink"],
+      "title": ["title", "jobTitle", "name"],
+      "company": ["client.name", "clientName", "companyName", "company"],
+      "poster_name": ["client.name", "clientName", "posterName"],
+      "description": ["description", "jobDescription", "snippet", "text"],
+      "posted_at": ["postedAt", "publishedAt", "createdAt", "postedOn", "datePosted"],
+      "comp_type_raw": ["jobType", "type", "budgetType", "paymentType"],
+      "comp_min": ["hourlyBudgetMin", "budget.min", "hourlyRange.min", "minBudget"],
+      "comp_max": ["hourlyBudgetMax", "budget.max", "hourlyRange.max", "maxBudget", "amount", "budget"],
+      "comp_text": ["budgetText", "salary", "rate", "budget"],
+      "est_hours": ["estimatedHours", "hoursPerWeek", "workload"],
+      "location": ["clientLocation", "client.location.country", "location"],
+      "remote": []
+    },
+    "required": ["url", "title", "description"],
+    "defaults": { "remote": true, "comp_type": "unknown" }
+  },
+  "linkedin": {
+    "actorId": "bebity/linkedin-jobs-scraper",
+    "verified": false,
+    "alternates": ["curious_coder/linkedin-jobs-scraper", "valig/linkedin-jobs-scraper", "anyxsolutions/linkedin-jobs-scraper"],
+    "input": {
+      "template": {},
+      "fields": {
+        "query": "title",
+        "maxItems": "rows",
+        "remote": "workType",
+        "postedWithinDays": "publishedAt"
+      },
+      "remoteValue": "remote",
+      "postedWithinDaysFormat": "r{seconds}"
+    },
+    "map": {
+      "url": ["jobUrl", "link", "url", "jobPostingUrl"],
+      "title": ["title", "jobTitle", "position"],
+      "company": ["companyName", "company.name", "company"],
+      "poster_name": ["posterFullName", "hiringManager", "posterName"],
+      "description": ["descriptionText", "description", "jobDescription"],
+      "posted_at": ["publishedAt", "postedAt", "listedAt", "postedTime"],
+      "comp_type_raw": ["salaryType", "compensationType"],
+      "comp_min": ["salaryMin", "compensation.min", "baseSalary.value.minValue"],
+      "comp_max": ["salaryMax", "compensation.max", "baseSalary.value.maxValue"],
+      "comp_text": ["salary", "salaryInfo", "compensation", "salaryText"],
+      "est_hours": [],
+      "location": ["location", "jobLocation", "formattedLocation"],
+      "remote": ["workType", "remote", "workplaceType", "isRemote"]
+    },
+    "required": ["url", "title", "description"],
+    "defaults": { "comp_type": "salary" }
+  },
+  "indeed": {
+    "actorId": "misceres/indeed-scraper",
+    "verified": false,
+    "alternates": ["borderline/indeed-scraper", "curious_coder/indeed-scraper", "memo23/apify-indeed-cheerio"],
+    "input": {
+      "template": { "country": "US", "parseCompanyDetails": false, "saveOnlyUniqueItems": true },
+      "fields": {
+        "query": "position",
+        "maxItems": "maxItems",
+        "remote": "location",
+        "postedWithinDays": "maxDaysOld"
+      },
+      "remoteValue": "Remote"
+    },
+    "map": {
+      "url": ["url", "jobUrl", "link"],
+      "title": ["positionName", "title", "jobTitle"],
+      "company": ["company", "companyName"],
+      "poster_name": [],
+      "description": ["description", "descriptionText", "jobDescription"],
+      "posted_at": ["postedAt", "postingDateParsed", "datePublished", "date"],
+      "comp_type_raw": ["salaryType", "jobType[0]"],
+      "comp_min": ["salaryMin", "salary.min"],
+      "comp_max": ["salaryMax", "salary.max"],
+      "comp_text": ["salary", "salaryText", "salarySnippet.text"],
+      "est_hours": [],
+      "location": ["location", "formattedLocation"],
+      "remote": ["isRemote", "remoteWorkModel", "remote"]
+    },
+    "required": ["url", "title", "description"],
+    "defaults": { "comp_type": "salary" }
+  }
+}

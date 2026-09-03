@@ -1,0 +1,32 @@
+[
+  {
+    "positionName": "Operations Manager",
+    "url": "https://www.indeed.com/viewjob?jk=aa11bb22cc33dd44&from=serp",
+    "company": "Halcyon Agency",
+    "description": "Marketing agency looking for an operations manager to run our internal systems. We use GoHighLevel and Zapier heavily. You would build SOPs, clean up our pipelines, and set up dashboards. Fully remote.",
+    "postedAt": "1 day ago",
+    "salary": "$120,000 - $145,000 a year",
+    "location": "Remote",
+    "isRemote": true
+  },
+  {
+    "positionName": "Sales Systems Analyst",
+    "url": "https://www.indeed.com/viewjob?jk=ee55ff66gg77hh88",
+    "company": "Ridgeline SaaS",
+    "description": "Own our HubSpot instance and the automations around it. Build dashboards in Looker Studio. Team of 8 on the revenue side. Remote within the US.",
+    "postedAt": 1756857600000,
+    "salary": "$65 an hour",
+    "location": "Remote",
+    "isRemote": true
+  },
+  {
+    "positionName": "Warehouse Associate",
+    "url": "https://www.indeed.com/viewjob?jk=ii99jj00kk11ll22",
+    "company": "Regional Logistics",
+    "description": "Pick and pack orders in our Phoenix distribution center. Must be able to lift 50 lbs.",
+    "postedAt": "3 days ago",
+    "salary": "$19 - $22 an hour",
+    "location": "Phoenix, AZ",
+    "isRemote": false
+  }
+]

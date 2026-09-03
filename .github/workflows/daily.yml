@@ -1,0 +1,54 @@
+name: Opportunity Finder
+
+on:
+  schedule:
+    # 13:00 UTC = 06:00 Arizona. Arizona does not observe DST, so this stays 6am
+    # year round with no seasonal drift.
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+    inputs:
+      skip_send:
+        description: 'Run everything except sending'
+        type: boolean
+        default: false
+
+# One run at a time. The Sheets mutex is the real guard; this stops GitHub from
+# queueing a second job against it in the first place.
+concurrency:
+  group: opportunity-finder
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # Apify actor runs dominate the wall clock. This is a ceiling, not a target.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Run pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          GMAIL_FROM: ${{ secrets.GMAIL_FROM }}
+          DIGEST_TO: ${{ secrets.DIGEST_TO }}
+          DEBOUNCE_API_KEY: ${{ secrets.DEBOUNCE_API_KEY }}
+          ENRICHMENT_PROVIDER: ${{ vars.ENRICHMENT_PROVIDER || 'stub' }}
+          ENRICHMENT_API_KEY: ${{ secrets.ENRICHMENT_API_KEY }}
+          LOG_LEVEL: info
+        run: node scripts/run-once.js ${{ inputs.skip_send && '--skip-send' || '' }}

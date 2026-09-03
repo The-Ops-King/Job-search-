@@ -1,0 +1,32 @@
+[
+  {
+    "title": "Sales Operations Manager",
+    "jobUrl": "https://www.linkedin.com/jobs/view/4012345678/?refId=abc&trackingId=xyz",
+    "companyName": "Peak Performance Coaching",
+    "descriptionText": "We are a remote-first coaching company scaling past $8M. You will own our HubSpot instance, build reporting for the sales team, and automate handoffs between setters and closers. Small team, you would be our first dedicated ops hire.",
+    "publishedAt": "2026-09-02T08:00:00.000Z",
+    "salary": "$130,000 - $160,000 a year",
+    "location": "United States (Remote)",
+    "workType": "remote",
+    "posterFullName": "Dana Whitfield"
+  },
+  {
+    "title": "Revenue Operations Lead",
+    "jobUrl": "https://www.linkedin.com/jobs/view/4087654321/",
+    "companyName": "Northwind Systems",
+    "descriptionText": "Seeking a RevOps leader with 5+ years of RevOps experience and deep Salesforce administration skills. You will own CPQ, territory planning, and forecasting models across a 200 person go to market organization. Hybrid, 3 days per week in our Chicago office.",
+    "publishedAt": "2026-09-01T12:00:00.000Z",
+    "salary": "$180,000 - $220,000 a year",
+    "location": "Chicago, IL",
+    "workType": "hybrid"
+  },
+  {
+    "title": "Operations Manager",
+    "jobUrl": "https://www.linkedin.com/jobs/view/4099999999/",
+    "companyName": "Halcyon Agency",
+    "descriptionText": "Marketing agency looking for an operations manager to run our internal systems. We use GoHighLevel and Zapier heavily. You would build SOPs, clean up our pipelines, and set up dashboards. Fully remote.",
+    "publishedAt": "2026-09-02T16:45:00.000Z",
+    "location": "Remote",
+    "workType": "remote"
+  }
+]

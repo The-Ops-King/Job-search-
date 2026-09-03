@@ -1,0 +1,33 @@
+[
+  {
+    "title": "GoHighLevel Automation Expert Needed for Coaching Business",
+    "url": "https://www.upwork.com/jobs/~0123456789abcdef?source=search",
+    "description": "We run a high ticket coaching business doing about $4M/yr. We have 6 closers and 3 setters working leads out of GoHighLevel. Our speed to lead is terrible and nobody knows which setter sourced which closed deal. Looking for someone who can rebuild our pipeline structure, set up round robin assignment, and build a commission tracker. Zapier experience required.",
+    "postedAt": "2026-09-02T14:30:00.000Z",
+    "jobType": "Hourly",
+    "hourlyBudgetMin": 85,
+    "hourlyBudgetMax": 150,
+    "estimatedHours": 40,
+    "client": { "name": "Confidential Client", "location": { "country": "United States" } },
+    "skills": ["GoHighLevel", "Zapier", "CRM"]
+  },
+  {
+    "title": "High Ticket Closer Wanted - $15k/mo Coaching Offer",
+    "url": "https://www.upwork.com/jobs/~0fedcba987654321",
+    "description": "Scaling our sales team from 4 to 12 closers over the next quarter. You will be taking 15-20 booked calls per week selling a $15k coaching program. Commission only, uncapped. We book the calls, you close them.",
+    "postedAt": "2026-09-01T09:00:00.000Z",
+    "jobType": "Fixed",
+    "budget": 5000,
+    "client": { "name": "Growth Co", "location": { "country": "United States" } }
+  },
+  {
+    "title": "Data Entry Assistant",
+    "url": "https://www.upwork.com/jobs/~0aaaabbbbccccdddd",
+    "description": "Simple data entry work, copying values from PDFs into a spreadsheet. 10 hours per week ongoing.",
+    "postedAt": "2026-09-02T01:00:00.000Z",
+    "jobType": "Hourly",
+    "hourlyBudgetMin": 8,
+    "hourlyBudgetMax": 12,
+    "client": { "name": "Admin Solutions" }
+  }
+]
