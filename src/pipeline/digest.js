@@ -1,4 +1,5 @@
 import { log } from '../lib/log.js';
+import { spendLines } from './spend.js';
 
 /**
  * Plain text, no tables. Sent on every run including empty ones, so silence in the
@@ -28,10 +29,12 @@ export function buildDigest({
   failedSends = [],
   counts = {},
   costUsd = 0,
+  costNote = null,
   costGuardTripped = false,
   paused = false,
   errors = [],
   warnings = [],
+  spend = null,
   spreadsheetId,
   sheetIds = {},
 }) {
@@ -52,7 +55,7 @@ export function buildDigest({
     `PIPELINE: ${counts.new_posts ?? 0} new posts, ${counts.classified ?? 0} classified, ` +
     `${counts.gated ?? 0} passed the gate, ${counts.enriched ?? 0} enriched, ${counts.drafted ?? 0} drafted, ` +
     `${counts.sent ?? 0} sent`);
-  lines.push(`COST: $${Number(costUsd).toFixed(2)} estimated`);
+  lines.push(`COST: ${costNote ?? `$${Number(costUsd).toFixed(2)} estimated`}`);
   if (costGuardTripped) lines.push('COST GUARD TRIPPED: the run stopped before enrichment. Nothing was enriched, drafted or sent.');
   if (paused) lines.push('PAUSED: Config.pause is TRUE. Everything ran except sending.');
   lines.push('');
@@ -101,6 +104,12 @@ export function buildDigest({
   if (errors.length) {
     lines.push(`ERRORS (${errors.length})`);
     for (const e of errors) lines.push(`  ${e}`);
+    lines.push('');
+  }
+
+  const spendBlock = spend ? spendLines(spend) : [];
+  if (spendBlock.length) {
+    lines.push(...spendBlock);
     lines.push('');
   }
 

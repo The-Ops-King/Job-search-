@@ -33,6 +33,7 @@ export async function collect({ source, client, actorConfig, queries, options, n
   const rawItems = [];
   const queryErrors = [];
   const metas = [];
+  const queryStats = [];
 
   for (const query of queries) {
     const input = buildInput(actorConfig, { query, maxItems, remote, postedWithinDays: lookbackDays });
@@ -40,6 +41,16 @@ export async function collect({ source, client, actorConfig, queries, options, n
       const { items, meta } = await runActor(client, actorConfig.actorId, input, { timeoutSecs });
       rawItems.push(...items);
       metas.push(meta);
+
+      // Apify bills per result, per query, and dedupe runs afterwards. A posting
+      // matching several queries is paid for several times, so knowing what each
+      // query actually returned is the only way to tell which ones earn their cost.
+      queryStats.push({
+        query,
+        items: items.length,
+        costUsd: meta.costUsd,
+        cappedOut: items.length >= maxItems,
+      });
     } catch (error) {
       queryErrors.push({ query, message: error.message });
       log.warn('query failed', { source, query, error: error.message });
@@ -68,6 +79,7 @@ export async function collect({ source, client, actorConfig, queries, options, n
       droppedStale: stale,
       queriesRun: queries.length - queryErrors.length,
       queriesFailed: queryErrors.length,
+      queryStats,
       inventory,
     },
     warnings: [

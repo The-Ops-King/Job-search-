@@ -23,6 +23,7 @@ import { enrichLeads } from './pipeline/enrich.js';
 import { draftAll } from './pipeline/draft.js';
 import { sendApproved, sendPatches } from './pipeline/send.js';
 import { buildDigest, sendDigest } from './pipeline/digest.js';
+import { summarizeSpend } from './pipeline/spend.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCES = { upwork, linkedin, indeed };
@@ -108,6 +109,7 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
   let newLeadCandidates = [];
   let enrichedLeads = [];
   let fatal = null;
+  let collectedRaw = 0;
 
   try {
     try {
@@ -159,6 +161,7 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
         nearDupeSources: config.near_dupe_sources ?? files.scoring.near_dupe_sources,
       });
       counts.new_posts = fresh.length;
+      collectedRaw = collected.length;
       log.info('dedupe complete', {
         collected: collected.length, fresh: fresh.length,
         exact_duplicates: exactDuplicates.length, cross_posts: nearDuplicates.length,

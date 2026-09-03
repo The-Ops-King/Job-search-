@@ -190,6 +190,30 @@ the figure is the API-list equivalent of the quota consumed, which is the only
 comparable number available; the real money in that row is Apify plus enrichment.
 Either way it is an estimate, and the vendor dashboards are authoritative.
 
+### Apify is the real bill
+
+Apify charges per result, and dedupe runs after billing. A posting matching four of
+your queries is paid for four times and kept once, which is invisible in a total.
+
+At the shipped defaults that is 58 queries per run at up to 50 results each: a ceiling
+of $218 to $261 a month at $2.50 to $3.00 per thousand. Realistically far less, because
+a two-day lookback means most queries return nowhere near 50. The spread is wide enough
+that the first run should settle it rather than an estimate.
+
+So every run reports what each query actually cost, which queries returned nothing,
+which hit the result cap, and the cost per post that survived dedupe. Read that block
+in the first digest before tuning anything.
+
+Four levers, roughly in order of size:
+
+1. Map a recency filter for Upwork. `config/actors.json` currently has
+   `postedWithinDays: null` there, so Upwork refetches its full cap daily regardless of
+   age and dedupe discards nearly all of it after you have paid. Whether the actor
+   supports one is a `probe-actor` question.
+2. Cut the 18 shared queries down. They overlap heavily, and overlap is billed.
+3. Lower `max_items_per_query`. In a two-day window few queries have 20 new results.
+4. Run LinkedIn and Indeed less often than Upwork. Salaried roles turn over slowly.
+
 ## Layout
 
 ```
