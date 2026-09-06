@@ -69,9 +69,35 @@ describe('the approval gate', () => {
 describe('sendApproved', () => {
   const gmail = () => ({ send: vi.fn().mockResolvedValue({ messageId: 'msg-1' }) });
 
+  it('sends nothing at all unless sending_enabled is explicitly true', async () => {
+    const client = gmail();
+    for (const config of [{}, { sending_enabled: false }, { sending_enabled: 'TRUE' }, { pause: false }]) {
+      const result = await sendApproved([row()], { gmail: client, config: { max_sends_per_day: 10, ...config } });
+      expect(client.send, JSON.stringify(config)).not.toHaveBeenCalled();
+      expect(result.disabled).toBe(true);
+    }
+  });
+
+  it('counts the drafts that have an address, so the digest can say what is ready to copy', async () => {
+    const rows = [row(), row({ _row: 3, post_id: 'p2' }), row({ _row: 4, post_id: 'p3', to_email: '' })];
+    const result = await sendApproved(rows, { gmail: gmail(), config: {} });
+    expect(result.readyToCopy).toBe(2);
+  });
+
+  it('does not count an already-sent row as ready to copy', async () => {
+    const rows = [row({ sent_at: '2026-09-01T00:00:00Z' })];
+    expect((await sendApproved(rows, { gmail: gmail(), config: {} })).readyToCopy).toBe(0);
+  });
+
+  it('needs no gmail client at all while sending is off', async () => {
+    const result = await sendApproved([row()], { gmail: null, config: {} });
+    expect(result.disabled).toBe(true);
+    expect(result.sent).toEqual([]);
+  });
+
   it('does everything except send when Config.pause is TRUE', async () => {
     const client = gmail();
-    const result = await sendApproved([row()], { gmail: client, config: { pause: true, max_sends_per_day: 10 } });
+    const result = await sendApproved([row()], { gmail: client, config: { sending_enabled: true, pause: true, max_sends_per_day: 10 } });
     expect(client.send).not.toHaveBeenCalled();
     expect(result.paused).toBe(true);
     expect(result.sent).toHaveLength(0);
@@ -79,7 +105,7 @@ describe('sendApproved', () => {
 
   it('sends exactly one email per approved row and records the message id', async () => {
     const client = gmail();
-    const result = await sendApproved([row()], { gmail: client, config: { pause: false, max_sends_per_day: 10 } });
+    const result = await sendApproved([row()], { gmail: client, config: { sending_enabled: true, pause: false, max_sends_per_day: 10 } });
     expect(client.send).toHaveBeenCalledTimes(1);
     expect(result.sent[0].messageId).toBe('msg-1');
 
@@ -91,7 +117,7 @@ describe('sendApproved', () => {
 
   it('records a failure on the row instead of throwing', async () => {
     const client = { send: vi.fn().mockRejectedValue(new Error('550 rejected')) };
-    const result = await sendApproved([row()], { gmail: client, config: { pause: false, max_sends_per_day: 10 } });
+    const result = await sendApproved([row()], { gmail: client, config: { sending_enabled: true, pause: false, max_sends_per_day: 10 } });
     expect(result.sent).toHaveLength(0);
     expect(sendPatches(result)[0].patch.error).toContain('550 rejected');
   });
@@ -103,7 +129,7 @@ describe('sendApproved', () => {
         .mockResolvedValueOnce({ messageId: 'msg-2' }),
     };
     const rows = [row({ _row: 2 }), row({ _row: 3, post_id: 'p2' })];
-    const result = await sendApproved(rows, { gmail: client, config: { pause: false, max_sends_per_day: 10 } });
+    const result = await sendApproved(rows, { gmail: client, config: { sending_enabled: true, pause: false, max_sends_per_day: 10 } });
     expect(result.sent).toHaveLength(1);
     expect(result.failed).toHaveLength(1);
   });

@@ -14,17 +14,43 @@ Every stage reads its inputs from the sheet and writes its outputs back before t
 next one starts. A crash halfway leaves the sheet consistent and the next run picks
 up from it. Re-running the same day adds no rows and sends no second email.
 
+## What it costs to run
+
+About $18 a month, all of it Apify, and it is capped so it cannot go higher without
+you raising the cap.
+
+| | |
+| --- | --- |
+| Claude | $0. Runs on a Claude subscription through headless Claude Code |
+| Apify | capped at `max_apify_cost_per_run`, $0.60 default, $18 a month daily |
+| Google Sheets | $0 |
+| GitHub Actions | $0. Public repo is unlimited; a private repo gets 2,000 minutes a month, and the Apify budget cap keeps runs short enough to stay inside that |
+| Email | $0, because sending is off |
+
+Sending is off by default and that is a cost decision. Automated email needs a
+Workspace seat on a secondary domain, roughly $8 a month, and at five to fifteen
+personally approved messages a day it buys very little over copying a draft you have
+already read. Contact enrichment is the same story: the stub finds no addresses, so
+nothing bills, and every lead arrives with a written draft either way.
+
+Turning sending on later is one value in the Config tab plus the Gmail variables. The
+code path is intact and tested; it is switched off, not removed.
+
 ## Setup
 
 ```bash
 npm install
 npm install -g @anthropic-ai/claude-code   # the default model backend
 claude setup-token                         # long-lived token, needs a Claude subscription
-cp .env.example .env                       # paste the token, fill in the rest
+cp .env.example .env                       # paste the token, plus Apify and Sheets
 npm run setup-sheet                        # creates tabs, headers, checkboxes, Config defaults
 npm test
-npm run run-once -- --skip-send
+npm run run-once
 ```
+
+Only four variables are required: `CLAUDE_CODE_OAUTH_TOKEN`, `APIFY_TOKEN`,
+`GOOGLE_SERVICE_ACCOUNT_JSON` and `SHEET_ID`. Everything under Sending and Enrichment
+in `.env.example` is optional and unused until you turn sending on.
 
 Create the spreadsheet yourself, put its id in `SHEET_ID`, and share it with the
 service account's `client_email` as an Editor. Without that share every API call
@@ -119,21 +145,29 @@ how you prove the pre-filter is not the reason something went missing.
 | Outreach | One draft per lead, with the APPROVE checkbox |
 | Runs | One row per run: counts, cost estimate, errors |
 | Config | Runtime overrides. These beat `config/scoring.json` without a deploy |
+| Digest | The run summary, one row per run. This is where the digest goes instead of an inbox |
 
 Headers are the contract. Nothing writes by column index, so reordering columns in the
 sheet is harmless. Renaming one is not, and `load()` will say which column went
 missing.
 
-### Approving a send
+### Getting outreach out
 
-Check APPROVE on an Outreach row. The next run sends it, writes `sent_at` and
-`message_id`, and never touches it again. Unchecking the box afterwards changes
-nothing, because `sent_at` is what gates eligibility, not the checkbox.
+With sending off, which is the default, the Outreach tab is the work queue. Each row
+has a subject, a body and, where enrichment found one, an address. Read it, copy it,
+send it yourself. The digest says how many are waiting and how many have an address.
+
+Once sending is on (`Config.sending_enabled` = `TRUE` plus Gmail credentials), check
+APPROVE on a row and the next run sends it, writes `sent_at` and `message_id`, and
+never touches it again. Unchecking the box afterwards changes nothing, because
+`sent_at` gates eligibility, not the checkbox.
 
 A row that fails to send keeps the error text and is not retried automatically. Clear
 the error cell to make it eligible again.
 
-Set `Config.pause` to `TRUE` to run everything except sending.
+`Config.pause` = `TRUE` stops sending while leaving everything else running. It is
+independent of `sending_enabled`: one is a temporary hold, the other is whether the
+feature is on at all.
 
 ## Tuning the rubric
 

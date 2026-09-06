@@ -32,6 +32,8 @@ export function buildDigest({
   costNote = null,
   costGuardTripped = false,
   paused = false,
+  sendingDisabled = false,
+  readyToCopy = 0,
   errors = [],
   warnings = [],
   spend = null,
@@ -74,7 +76,10 @@ export function buildDigest({
   }
   lines.push('');
 
-  if (sentRows.length) {
+  if (sendingDisabled) {
+    lines.push('SENDING: off (Config.sending_enabled = FALSE). Drafts are in the Outreach tab to copy.');
+    if (readyToCopy) lines.push(`  ${readyToCopy} of them have an email address on the row.`);
+  } else if (sentRows.length) {
     lines.push(`SENT (${sentRows.length})`);
     for (const s of sentRows) lines.push(`  ${s.to_email} | ${s.subject}`);
   } else {
@@ -82,7 +87,7 @@ export function buildDigest({
   }
   lines.push('');
 
-  lines.push(`AWAITING APPROVAL: ${awaitingApproval.length}`);
+  lines.push(`${sendingDisabled ? 'DRAFTS WAITING' : 'AWAITING APPROVAL'}: ${awaitingApproval.length}`);
   for (const row of awaitingApproval.slice(0, 25)) {
     lines.push(`  ${row.channel} | ${row.title ?? row.post_id} | ${row.to_email || 'no email'}`);
   }
@@ -116,7 +121,9 @@ export function buildDigest({
   if (spreadsheetId) lines.push(`Sheet: https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`);
 
   return {
-    subject: `Opportunity Finder: ${newLeads.length} new, ${awaitingApproval.length} awaiting, ${counts.sent ?? 0} sent`,
+    subject: sendingDisabled
+      ? `Opportunity Finder: ${newLeads.length} new, ${awaitingApproval.length} drafts waiting`
+      : `Opportunity Finder: ${newLeads.length} new, ${awaitingApproval.length} awaiting, ${counts.sent ?? 0} sent`,
     body: lines.join('\n'),
   };
 }

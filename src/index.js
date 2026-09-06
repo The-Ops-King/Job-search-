@@ -78,12 +78,7 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
   const counts = { new_posts: 0, prefiltered: 0, classified: 0, gated: 0, enriched: 0, drafted: 0, sent: 0 };
   const sourceStats = {};
 
-  const { backend, gmailConfigured, missingOptional } = preflight();
-  if (!gmailConfigured) {
-    warnings.push(
-      `Gmail is not configured (${missingOptional.join(', ')} not set). Nothing will be sent ` +
-      `and the digest will be written to stdout instead of emailed.`);
-  }
+  const { backend, gmailConfigured } = preflight();
 
   const files = await loadConfigFiles(root);
   const store = await createSheetsClient();
@@ -378,16 +373,30 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
       }
 
       // --- send -----------------------------------------------------------
-      try {
-        gmail = createGmailClient();
-      } catch (error) {
-        errors.add('gmail', error);
+      // Only constructed when it will be used. With sending off and no DIGEST_TO,
+      // the pipeline needs no Gmail credentials at all.
+      const wantsGmail = config.sending_enabled === true || Boolean(process.env.DIGEST_TO);
+      if (wantsGmail && gmailConfigured) {
+        try {
+          gmail = createGmailClient();
+        } catch (error) {
+          errors.add('gmail', error);
+        }
+      } else if (wantsGmail && !gmailConfigured) {
+        warnings.push(
+          'Gmail credentials are missing, so nothing can be emailed. The digest is still ' +
+          'written to the Digest tab.');
       }
 
       currentOutreach = await store.loadKeyed('Outreach');
-      if (gmail && !skipSend && !costGuardTripped) {
+      if (!skipSend && !costGuardTripped) {
         sendResult = await sendApproved(currentOutreach.rows, { gmail, config, dryRun });
         paused = sendResult.paused;
+        if (sendResult.disabled && sendResult.readyToCopy) {
+          warnings.push(
+            `Sending is off (Config.sending_enabled = FALSE). ${sendResult.readyToCopy} drafts have ` +
+            `an address and are ready to copy from the Outreach tab.`);
+        }
         counts.sent = sendResult.sent.length;
         const patches = sendPatches(sendResult);
         if (patches.length) await store.update('Outreach', patches);
@@ -467,22 +476,43 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
       sheetIds: await store.sheetIds(),
     });
 
-    if (gmail) {
+    // The sheet is the durable copy and needs no credentials. Email, when it is
+    // configured at all, is a convenience on top.
+    await store.append('Digest', [{
+      run_id: runIdValue,
+      generated_at: finishedAt,
+      summary: digest.subject,
+      body: digest.body,
+    }]).catch((error) => errors.add('digest-tab', error));
+
+    await writeJobSummary(digest);
+
+    if (gmail && process.env.DIGEST_TO) {
       try {
         await sendDigest(gmail, digest);
       } catch (error) {
         errors.add('digest', error);
-        process.stdout.write(`\n${digest.body}\n`);
       }
-    } else {
-      process.stdout.write(`\n${digest.body}\n`);
     }
+    process.stdout.write(`\n${digest.body}\n`);
 
     log.info('run finished', { run_id: runIdValue, ...counts, cost_usd: meter.total, errors: errors.length, fatal: Boolean(fatal) });
     if (fatal) throw fatal;
     return { runId: runIdValue, counts, costUsd: meter.total, errors: errors.toLines(), warnings, digest };
   } finally {
     await release().catch((error) => log.error('failed to release lock', { error: error.message }));
+  }
+}
+
+/** Renders the digest into the GitHub Actions run page. Free, and no inbox needed. */
+async function writeJobSummary(digest) {
+  const path = process.env.GITHUB_STEP_SUMMARY;
+  if (!path) return;
+  try {
+    const { appendFile } = await import('node:fs/promises');
+    await appendFile(path, `## ${digest.subject}\n\n\`\`\`\n${digest.body}\n\`\`\`\n`, 'utf8');
+  } catch (error) {
+    log.warn('could not write job summary', { error: error.message });
   }
 }
 

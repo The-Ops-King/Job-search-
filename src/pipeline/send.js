@@ -31,9 +31,22 @@ export function eligibleRows(outreachRows, { maxSends }) {
 }
 
 export async function sendApproved(outreachRows, { gmail, config, dryRun = false }) {
+  // Off by default. Automated sending needs a Workspace seat on a secondary domain,
+  // and at this volume it buys little over copying a draft you already approved.
+  // The path stays intact so turning it on later is one Config value, not a rebuild.
+  if (config?.sending_enabled !== true) {
+    const ready = outreachRows.filter(
+      (r) => String(r.channel) === CHANNEL.EMAIL && !String(r.sent_at ?? '').trim() && String(r.to_email ?? '').trim());
+    log.info('sending disabled', { rows_with_addresses: ready.length });
+    return {
+      sent: [], failed: [], deferred: 0, paused: false, disabled: true,
+      readyToCopy: ready.length, skipped: null,
+    };
+  }
+
   if (config?.pause === true) {
     log.warn('sending paused by Config.pause');
-    return { sent: [], failed: [], deferred: 0, paused: true, skipped: null };
+    return { sent: [], failed: [], deferred: 0, paused: true, disabled: false, skipped: null };
   }
 
   const { eligible, deferred, skipped } = eligibleRows(outreachRows, { maxSends: config?.max_sends_per_day ?? 0 });
@@ -59,7 +72,7 @@ export async function sendApproved(outreachRows, { gmail, config, dryRun = false
   }
 
   log.info('send complete', { eligible: eligible.length, sent: sent.length, failed: failed.length, deferred });
-  return { sent, failed, deferred, paused: false, skipped };
+  return { sent, failed, deferred, paused: false, disabled: false, skipped };
 }
 
 /** Cell patches recording the outcome. Only these three columns are ever touched. */

@@ -84,6 +84,14 @@ export const TABS = {
     key: 'key',
     headers: ['key', 'value', 'notes'],
   },
+
+  // The digest lives here rather than in an inbox. Email delivery needs a Workspace
+  // seat on a sending domain, which is real money for something whose only job is to
+  // tell you what is already in the sheet you are looking at.
+  Digest: {
+    key: 'run_id',
+    headers: ['run_id', 'generated_at', 'summary', 'body'],
+  },
 };
 
 export const TAB_NAMES = Object.keys(TABS);
@@ -93,7 +101,8 @@ export const TAB_NAMES = Object.keys(TABS);
  * Values here override config/scoring.json at runtime.
  */
 export const CONFIG_SEED = [
-  ['pause', 'FALSE', 'TRUE stops sending. Everything else still runs.'],
+  ['sending_enabled', 'FALSE', 'FALSE means no email is ever sent, and no Gmail credentials are needed. Drafts still land in Outreach for you to copy. Set TRUE once a sending domain exists.'],
+  ['pause', 'FALSE', 'TRUE stops sending. Everything else still runs. Independent of sending_enabled.'],
   ['fit_score_gate', '7', 'Minimum fit_score to become a lead.'],
   ['salary_floor_annual', '120000', 'Reject salaried roles whose top-of-range is below this.'],
   ['hourly_floor', '100', 'Reject hourly work below this rate.'],
