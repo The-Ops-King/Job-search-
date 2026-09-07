@@ -228,3 +228,24 @@ describe('actor-imposed minimum on maxItems', () => {
     expect(buildInput(actorConfig, { query: 'x', maxItems: 5 }).n).toBe(5);
   });
 });
+
+describe('per-actor billing rates', () => {
+  const queries = ['q1'];
+  const options = { maxItems: 20, lookbackDays: 2, timeoutSecs: 60 };
+
+  it('uses the actor’s own rate rather than one global assumption', async () => {
+    const pricey = { ...actorConfig, costPer1kResults: 6.0 };
+    const client = fakeClient({ itemsPerQuery: 100, costPerItem: 0 });
+    const budget = new RunBudget({ capUsd: 10, assumedCostPer1k: 3, maxItemsPerQuery: 20 });
+    await collect({ source: 'linkedin', client, actorConfig: pricey, queries, options, budget });
+    // 100 items at $6/1k is $0.60, not the $0.30 the global rate would have assumed.
+    expect(budget.spent).toBeCloseTo(0.60, 5);
+  });
+
+  it('falls back to the global rate for an actor with no rate set', async () => {
+    const client = fakeClient({ itemsPerQuery: 100, costPerItem: 0 });
+    const budget = new RunBudget({ capUsd: 10, assumedCostPer1k: 3, maxItemsPerQuery: 20 });
+    await collect({ source: 'indeed', client, actorConfig, queries, options, budget });
+    expect(budget.spent).toBeCloseTo(0.30, 5);
+  });
+});

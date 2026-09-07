@@ -65,7 +65,10 @@ export async function collect({ source, client, actorConfig, queries, options, n
       // zero spend forever and never firing, so fall back to the assumed per-result
       // rate whenever the actor reports nothing. The cap is worthless otherwise.
       const reported = Number(meta.costUsd ?? 0);
-      const estimated = (items.length / 1000) * (budget?.assumedCostPer1k ?? 3.0);
+      // Rates differ per actor: Indeed is about $3/1k, the LinkedIn replacement about
+      // $6. A single global assumption would under-count the expensive one by half.
+      const ratePer1k = Number(actorConfig.costPer1kResults ?? budget?.assumedCostPer1k ?? 3.0);
+      const estimated = (items.length / 1000) * ratePer1k;
       const billed = reported > 0 ? reported : estimated;
       meta.costUsd = billed;
       meta.costEstimated = reported <= 0;

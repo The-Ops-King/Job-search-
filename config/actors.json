@@ -113,32 +113,38 @@
       "remote": true,
       "comp_type": "unknown"
     },
-    "probe_note": "Rejects maxItems < 20 with a 400."
+    "probe_note": "Rejects maxItems < 20 with a 400.",
+    "costPer1kResults": 2.5
   },
   "linkedin": {
-    "actorId": "bebity/linkedin-jobs-scraper",
+    "actorId": "smorgi_apps/linkedin-jobs-scraper",
     "verified": false,
+    "costPer1kResults": 6.0,
+    "pricing_note": "Pay per result, roughly $6/1k. Chosen over bebity/linkedin-jobs-scraper, which is a $29.99/month rental the per-run budget cap cannot see.",
     "alternates": [
+      "cheap_scraper/linkedin-job-scraper",
+      "magicfingers/linkedin-jobs-scraper",
       "curious_coder/linkedin-jobs-scraper",
-      "valig/linkedin-jobs-scraper",
-      "anyxsolutions/linkedin-jobs-scraper"
+      "automly/linkedin-jobs-scraper"
     ],
+    "rejected": {
+      "bebity/linkedin-jobs-scraper": "$29.99/month rental, fixed fee outside the budget cap"
+    },
     "input": {
       "template": {},
       "fields": {
-        "query": "title",
-        "maxItems": "rows",
-        "remote": "workType",
-        "postedWithinDays": "publishedAt"
+        "query": "keyword",
+        "maxItems": "maxItems",
+        "remote": "workplaceType",
+        "postedWithinDays": "postedLimit"
       },
-      "remoteValue": "remote",
-      "postedWithinDaysFormat": "r{seconds}"
+      "remoteValue": "remote"
     },
     "map": {
       "url": [
         "jobUrl",
-        "link",
         "url",
+        "link",
         "jobPostingUrl"
       ],
       "title": [
@@ -162,30 +168,29 @@
         "jobDescription"
       ],
       "posted_at": [
-        "publishedAt",
         "postedAt",
+        "publishedAt",
         "listedAt",
-        "postedTime"
+        "postedDate",
+        "datePosted"
       ],
       "comp_type_raw": [
+        "employmentType",
         "salaryType",
-        "compensationType"
+        "jobType[0]"
       ],
       "comp_min": [
         "salaryMin",
-        "compensation.min",
-        "baseSalary.value.minValue"
+        "compensation.min"
       ],
       "comp_max": [
         "salaryMax",
-        "compensation.max",
-        "baseSalary.value.maxValue"
+        "compensation.max"
       ],
       "comp_text": [
         "salary",
-        "salaryInfo",
-        "compensation",
-        "salaryText"
+        "salaryText",
+        "compensation"
       ],
       "est_hours": [],
       "location": [
@@ -194,10 +199,14 @@
         "formattedLocation"
       ],
       "remote": [
-        "workType",
-        "remote",
         "workplaceType",
-        "isRemote"
+        "workType",
+        "isRemote",
+        "location"
+      ],
+      "expired": [
+        "isExpired",
+        "expired"
       ]
     },
     "required": [
@@ -207,8 +216,7 @@
     ],
     "defaults": {
       "comp_type": "salary"
-    },
-    "blocked": "Rental actor: 403 actor-is-not-rented. Fixed monthly fee, not pay-per-result."
+    }
   },
   "indeed": {
     "actorId": "misceres/indeed-scraper",
@@ -290,6 +298,7 @@
     "defaults": {
       "comp_type": "salary"
     },
-    "verified_at": "2026-09-07, build 0.0.108, 5/5 items"
+    "verified_at": "2026-09-07, build 0.0.108, 5/5 items",
+    "costPer1kResults": 3.0
   }
 }
