@@ -1,0 +1,111 @@
+name: Setup and Probe
+
+# Everything here runs on a GitHub runner, which can reach Apify and Google. Nothing
+# needs the repository cloned locally: add the secrets in repo Settings, pick a task
+# from the Actions tab, read the result in the run summary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'What to run'
+        type: choice
+        required: true
+        default: probe-actors
+        options:
+          - probe-actors
+          - setup-sheet
+          - run-once-no-send
+      query:
+        description: 'Search term for probe-actors'
+        type: string
+        required: false
+        default: 'sales operations'
+
+concurrency:
+  group: opportunity-finder
+  cancel-in-progress: false
+
+jobs:
+  task:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      LLM_BACKEND: ${{ vars.LLM_BACKEND || 'claude_code' }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      SHEET_ID: ${{ secrets.SHEET_ID }}
+      ENRICHMENT_PROVIDER: stub
+      LOG_LEVEL: info
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Claude Code
+        if: inputs.task == 'run-once-no-send' && env.LLM_BACKEND != 'api'
+        run: npm install -g @anthropic-ai/claude-code
+
+      # Probes each actor once on five results. Costs a few cents of Apify credit and
+      # prints which mapped fields in config/actors.json actually resolve.
+      - name: Probe actors
+        if: inputs.task == 'probe-actors'
+        shell: bash
+        run: |
+          {
+            echo '## Actor probe results'
+            echo
+            echo 'Paste this whole block back into the Claude session.'
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for source in upwork linkedin indeed; do
+            echo "::group::$source"
+            echo "### $source" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+            # Output is captured to a file rather than piped, so node's exit code
+            # survives. A dead actor id is itself a finding and must not read as
+            # success, and one failing source must not stop the other two.
+            if node scripts/probe-actor.js "$source" "${{ inputs.query }}" > "/tmp/$source.log" 2>&1; then
+              status="ok"
+            else
+              status="FAILED (exit $?)"
+            fi
+
+            cat "/tmp/$source.log" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "result: $status" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+
+            cat "/tmp/$source.log"
+            echo "::endgroup::"
+          done
+
+      - name: Upload raw actor output
+        if: inputs.task == 'probe-actors'
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-raw-output
+          path: .probe/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Create sheet tabs
+        if: inputs.task == 'setup-sheet'
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/setup-sheet.js 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Run pipeline without sending
+        if: inputs.task == 'run-once-no-send'
+        run: node scripts/run-once.js --skip-send
