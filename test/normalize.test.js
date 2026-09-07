@@ -120,11 +120,13 @@ describe('parseRemote', () => {
 describe('normalizeAll against fixtures', () => {
   for (const source of ['upwork', 'linkedin', 'indeed']) {
     it(`maps every ${source} fixture item to a canonical Post`, () => {
-      const { posts, dropped } = normalizeAll(fixture(source), {
+      const items = fixture(source);
+      const live = items.filter((i) => i.isExpired !== true);
+      const { posts, dropped } = normalizeAll(items, {
         source, actorConfig: actors[source], now: NOW,
       });
       expect(dropped).toBe(0);
-      expect(posts).toHaveLength(fixture(source).length);
+      expect(posts).toHaveLength(live.length);
       for (const post of posts) {
         expect(post.post_id).toMatch(/^[a-f0-9]{64}$/);
         expect(post.source).toBe(source);
@@ -188,10 +190,51 @@ describe('schema drift', () => {
   });
 
   it('warns rather than fails when only posted_at stops resolving', () => {
-    const items = fixture('indeed').map(({ postedAt, ...rest }) => rest);
+    // Both date fields have to go: the real actor returns postedAt null and carries
+    // the value in postingDateParsed, which is why the mapping lists both.
+    const items = fixture('indeed')
+      .filter((i) => !i.isExpired)
+      .map(({ postedAt, postingDateParsed, ...rest }) => rest);
     const { posts, warnings } = normalizeAll(items, { source: 'indeed', actorConfig: actors.indeed, now: NOW });
     expect(posts).toHaveLength(3);
     expect(warnings.join(' ')).toContain('posted_at never resolved');
+  });
+});
+
+describe('real Indeed output', () => {
+  const live = () => normalizeAll(fixture('indeed'), { source: 'indeed', actorConfig: actors.indeed, now: NOW });
+
+  it('drops expired postings before they cost a classification call', () => {
+    const { posts, expired } = live();
+    expect(expired).toBe(1);
+    expect(posts.map((p) => p.title)).not.toContain('Revenue Operations Manager');
+  });
+
+  it('reads the date from postingDateParsed, since the actor returns postedAt null', () => {
+    const [post] = live().posts;
+    expect(post.posted_at).toBe('2026-09-02T14:00:00.000Z');
+  });
+
+  it('derives remote from the location string, the only signal the actor gives', () => {
+    const posts = live().posts;
+    expect(posts.find((p) => p.title === 'Operations Manager').remote).toBe(true);
+    // A real city is not evidence of onsite, so this stays unknown rather than false.
+    expect(posts.find((p) => p.title === 'Warehouse Associate').remote).toBeNull();
+  });
+
+  it('parses the salary string, since the actor exposes no numeric pay fields', () => {
+    const posts = live().posts;
+    const salaried = posts.find((p) => p.title === 'Operations Manager');
+    expect(salaried).toMatchObject({ comp_type: 'salary', comp_min: 120000, comp_max: 145000 });
+    const hourly = posts.find((p) => p.title === 'Sales Systems Analyst');
+    expect(hourly).toMatchObject({ comp_type: 'hourly', comp_min: 65, comp_max: 65 });
+  });
+
+  it('does not count expired items as schema drift', () => {
+    const allExpired = fixture('indeed').map((i) => ({ ...i, isExpired: true }));
+    const { posts, expired } = normalizeAll(allExpired, { source: 'indeed', actorConfig: actors.indeed, now: NOW });
+    expect(expired).toBe(4);
+    expect(posts).toHaveLength(0);
   });
 });
 

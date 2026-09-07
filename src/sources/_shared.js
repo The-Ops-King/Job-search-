@@ -13,7 +13,12 @@ export function buildInput(actorConfig, { query, maxItems, remote, postedWithinD
   const input = { ...template };
 
   if (fields.query) input[fields.query] = query;
-  if (fields.maxItems) input[fields.maxItems] = maxItems;
+  if (fields.maxItems) {
+    // Upwork's actor 400s on maxItems below 20, so the floor belongs to the actor,
+    // not to our config.
+    const floor = Number(actorConfig.input?.minItems ?? 0);
+    input[fields.maxItems] = Math.max(maxItems, floor);
+  }
   if (fields.remote && remote) input[fields.remote] = remoteValue ?? true;
   if (fields.postedWithinDays && postedWithinDays) {
     input[fields.postedWithinDays] = postedWithinDaysFormat
@@ -54,7 +59,17 @@ export async function collect({ source, client, actorConfig, queries, options, n
       const { items, meta } = await runActor(client, actorConfig.actorId, input, { timeoutSecs });
       rawItems.push(...items);
       metas.push(meta);
-      budget?.record(meta.costUsd, { source, query });
+
+      // The live probe came back with usageTotalUsd of 0 from a run that plainly
+      // consumed results. Trusting that number would leave the budget cap reading
+      // zero spend forever and never firing, so fall back to the assumed per-result
+      // rate whenever the actor reports nothing. The cap is worthless otherwise.
+      const reported = Number(meta.costUsd ?? 0);
+      const estimated = (items.length / 1000) * (budget?.assumedCostPer1k ?? 3.0);
+      const billed = reported > 0 ? reported : estimated;
+      meta.costUsd = billed;
+      meta.costEstimated = reported <= 0;
+      budget?.record(billed, { source, query });
 
       // Apify bills per result, per query, and dedupe runs afterwards. A posting
       // matching several queries is paid for several times, so knowing what each
@@ -62,7 +77,8 @@ export async function collect({ source, client, actorConfig, queries, options, n
       queryStats.push({
         query,
         items: items.length,
-        costUsd: meta.costUsd,
+        costUsd: billed,
+        costEstimated: meta.costEstimated,
         cappedOut: items.length >= maxItems,
       });
     } catch (error) {

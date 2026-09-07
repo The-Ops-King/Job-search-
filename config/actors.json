@@ -15,7 +15,11 @@
   "upwork": {
     "actorId": "devcake/upwork-jobs-scraper",
     "verified": false,
-    "alternates": ["chronometrica/upwork-job-scraper", "josrade/upwork-jobs-scraper", "neatrat/upwork-job-scraper"],
+    "alternates": [
+      "chronometrica/upwork-job-scraper",
+      "josrade/upwork-jobs-scraper",
+      "neatrat/upwork-job-scraper"
+    ],
     "input": {
       "template": {},
       "fields": {
@@ -23,30 +27,102 @@
         "maxItems": "maxItems",
         "remote": null,
         "postedWithinDays": null
-      }
+      },
+      "minItems": 20
     },
     "map": {
-      "url": ["url", "jobUrl", "link", "jobLink"],
-      "title": ["title", "jobTitle", "name"],
-      "company": ["client.name", "clientName", "companyName", "company"],
-      "poster_name": ["client.name", "clientName", "posterName"],
-      "description": ["description", "jobDescription", "snippet", "text"],
-      "posted_at": ["postedAt", "publishedAt", "createdAt", "postedOn", "datePosted"],
-      "comp_type_raw": ["jobType", "type", "budgetType", "paymentType"],
-      "comp_min": ["hourlyBudgetMin", "budget.min", "hourlyRange.min", "minBudget"],
-      "comp_max": ["hourlyBudgetMax", "budget.max", "hourlyRange.max", "maxBudget", "amount", "budget"],
-      "comp_text": ["budgetText", "salary", "rate", "budget"],
-      "est_hours": ["estimatedHours", "hoursPerWeek", "workload"],
-      "location": ["clientLocation", "client.location.country", "location"],
+      "url": [
+        "url",
+        "jobUrl",
+        "link",
+        "jobLink"
+      ],
+      "title": [
+        "title",
+        "jobTitle",
+        "name"
+      ],
+      "company": [
+        "client.name",
+        "clientName",
+        "companyName",
+        "company"
+      ],
+      "poster_name": [
+        "client.name",
+        "clientName",
+        "posterName"
+      ],
+      "description": [
+        "description",
+        "jobDescription",
+        "snippet",
+        "text"
+      ],
+      "posted_at": [
+        "postedAt",
+        "publishedAt",
+        "createdAt",
+        "postedOn",
+        "datePosted"
+      ],
+      "comp_type_raw": [
+        "jobType",
+        "type",
+        "budgetType",
+        "paymentType"
+      ],
+      "comp_min": [
+        "hourlyBudgetMin",
+        "budget.min",
+        "hourlyRange.min",
+        "minBudget"
+      ],
+      "comp_max": [
+        "hourlyBudgetMax",
+        "budget.max",
+        "hourlyRange.max",
+        "maxBudget",
+        "amount",
+        "budget"
+      ],
+      "comp_text": [
+        "budgetText",
+        "salary",
+        "rate",
+        "budget"
+      ],
+      "est_hours": [
+        "estimatedHours",
+        "hoursPerWeek",
+        "workload"
+      ],
+      "location": [
+        "clientLocation",
+        "client.location.country",
+        "location"
+      ],
       "remote": []
     },
-    "required": ["url", "title", "description"],
-    "defaults": { "remote": true, "comp_type": "unknown" }
+    "required": [
+      "url",
+      "title",
+      "description"
+    ],
+    "defaults": {
+      "remote": true,
+      "comp_type": "unknown"
+    },
+    "probe_note": "Rejects maxItems < 20 with a 400."
   },
   "linkedin": {
     "actorId": "bebity/linkedin-jobs-scraper",
     "verified": false,
-    "alternates": ["curious_coder/linkedin-jobs-scraper", "valig/linkedin-jobs-scraper", "anyxsolutions/linkedin-jobs-scraper"],
+    "alternates": [
+      "curious_coder/linkedin-jobs-scraper",
+      "valig/linkedin-jobs-scraper",
+      "anyxsolutions/linkedin-jobs-scraper"
+    ],
     "input": {
       "template": {},
       "fields": {
@@ -59,29 +135,95 @@
       "postedWithinDaysFormat": "r{seconds}"
     },
     "map": {
-      "url": ["jobUrl", "link", "url", "jobPostingUrl"],
-      "title": ["title", "jobTitle", "position"],
-      "company": ["companyName", "company.name", "company"],
-      "poster_name": ["posterFullName", "hiringManager", "posterName"],
-      "description": ["descriptionText", "description", "jobDescription"],
-      "posted_at": ["publishedAt", "postedAt", "listedAt", "postedTime"],
-      "comp_type_raw": ["salaryType", "compensationType"],
-      "comp_min": ["salaryMin", "compensation.min", "baseSalary.value.minValue"],
-      "comp_max": ["salaryMax", "compensation.max", "baseSalary.value.maxValue"],
-      "comp_text": ["salary", "salaryInfo", "compensation", "salaryText"],
+      "url": [
+        "jobUrl",
+        "link",
+        "url",
+        "jobPostingUrl"
+      ],
+      "title": [
+        "title",
+        "jobTitle",
+        "position"
+      ],
+      "company": [
+        "companyName",
+        "company.name",
+        "company"
+      ],
+      "poster_name": [
+        "posterFullName",
+        "hiringManager",
+        "posterName"
+      ],
+      "description": [
+        "descriptionText",
+        "description",
+        "jobDescription"
+      ],
+      "posted_at": [
+        "publishedAt",
+        "postedAt",
+        "listedAt",
+        "postedTime"
+      ],
+      "comp_type_raw": [
+        "salaryType",
+        "compensationType"
+      ],
+      "comp_min": [
+        "salaryMin",
+        "compensation.min",
+        "baseSalary.value.minValue"
+      ],
+      "comp_max": [
+        "salaryMax",
+        "compensation.max",
+        "baseSalary.value.maxValue"
+      ],
+      "comp_text": [
+        "salary",
+        "salaryInfo",
+        "compensation",
+        "salaryText"
+      ],
       "est_hours": [],
-      "location": ["location", "jobLocation", "formattedLocation"],
-      "remote": ["workType", "remote", "workplaceType", "isRemote"]
+      "location": [
+        "location",
+        "jobLocation",
+        "formattedLocation"
+      ],
+      "remote": [
+        "workType",
+        "remote",
+        "workplaceType",
+        "isRemote"
+      ]
     },
-    "required": ["url", "title", "description"],
-    "defaults": { "comp_type": "salary" }
+    "required": [
+      "url",
+      "title",
+      "description"
+    ],
+    "defaults": {
+      "comp_type": "salary"
+    },
+    "blocked": "Rental actor: 403 actor-is-not-rented. Fixed monthly fee, not pay-per-result."
   },
   "indeed": {
     "actorId": "misceres/indeed-scraper",
-    "verified": false,
-    "alternates": ["borderline/indeed-scraper", "curious_coder/indeed-scraper", "memo23/apify-indeed-cheerio"],
+    "verified": true,
+    "alternates": [
+      "borderline/indeed-scraper",
+      "curious_coder/indeed-scraper",
+      "memo23/apify-indeed-cheerio"
+    ],
     "input": {
-      "template": { "country": "US", "parseCompanyDetails": false, "saveOnlyUniqueItems": true },
+      "template": {
+        "country": "US",
+        "parseCompanyDetails": false,
+        "saveOnlyUniqueItems": true
+      },
       "fields": {
         "query": "position",
         "maxItems": "maxItems",
@@ -91,21 +233,63 @@
       "remoteValue": "Remote"
     },
     "map": {
-      "url": ["url", "jobUrl", "link"],
-      "title": ["positionName", "title", "jobTitle"],
-      "company": ["company", "companyName"],
+      "url": [
+        "url",
+        "jobUrl",
+        "link"
+      ],
+      "title": [
+        "positionName",
+        "title",
+        "jobTitle"
+      ],
+      "company": [
+        "company",
+        "companyName"
+      ],
       "poster_name": [],
-      "description": ["description", "descriptionText", "jobDescription"],
-      "posted_at": ["postedAt", "postingDateParsed", "datePublished", "date"],
-      "comp_type_raw": ["salaryType", "jobType[0]"],
-      "comp_min": ["salaryMin", "salary.min"],
-      "comp_max": ["salaryMax", "salary.max"],
-      "comp_text": ["salary", "salaryText", "salarySnippet.text"],
+      "description": [
+        "description",
+        "descriptionText",
+        "jobDescription"
+      ],
+      "posted_at": [
+        "postingDateParsed",
+        "postedAt",
+        "datePublished",
+        "date"
+      ],
+      "comp_type_raw": [
+        "salaryType",
+        "jobType[0]"
+      ],
+      "comp_min": [],
+      "comp_max": [],
+      "comp_text": [
+        "salary",
+        "salaryText",
+        "salarySnippet.text"
+      ],
       "est_hours": [],
-      "location": ["location", "formattedLocation"],
-      "remote": ["isRemote", "remoteWorkModel", "remote"]
+      "location": [
+        "location",
+        "formattedLocation"
+      ],
+      "remote": [
+        "location"
+      ],
+      "expired": [
+        "isExpired"
+      ]
     },
-    "required": ["url", "title", "description"],
-    "defaults": { "comp_type": "salary" }
+    "required": [
+      "url",
+      "title",
+      "description"
+    ],
+    "defaults": {
+      "comp_type": "salary"
+    },
+    "verified_at": "2026-09-07, build 0.0.108, 5/5 items"
   }
 }

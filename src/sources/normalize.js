@@ -215,6 +215,13 @@ export function normalizeItem(item, { source, actorConfig, now = new Date() }) {
   const missing = required.filter((field) => isEmpty(values[field]));
   if (missing.length) return { post: null, missing, hits };
 
+  // An expired posting is a wasted classification call and a dead lead. Indeed
+  // flags them explicitly, so drop them here rather than paying to score them.
+  const expired = read('expired');
+  if (expired === true || /^(true|yes|expired)$/i.test(String(expired ?? ''))) {
+    return { post: null, missing: [], hits, expired: true };
+  }
+
   const url = values.url ?? read('url');
   const title = values.title ?? read('title');
   const description = values.description ?? read('description');
@@ -269,14 +276,17 @@ export function normalizeAll(items, { source, actorConfig, now = new Date(), dri
   const failures = [];
   const fieldHits = {};
 
+  let expiredCount = 0;
   for (const item of items) {
-    const { post, missing, hits } = normalizeItem(item, { source, actorConfig, now });
+    const result = normalizeItem(item, { source, actorConfig, now });
+    const { post, missing, hits } = result;
     for (const [field, path] of Object.entries(hits)) {
       fieldHits[field] ??= { hit: 0, total: 0, paths: new Set() };
       fieldHits[field].total += 1;
       if (path) { fieldHits[field].hit += 1; fieldHits[field].paths.add(path); }
     }
     if (post) posts.push(post);
+    else if (result.expired) expiredCount += 1;
     else failures.push({ missing, sample: Object.keys(item ?? {}).slice(0, 25) });
   }
 
@@ -293,12 +303,17 @@ export function normalizeAll(items, { source, actorConfig, now = new Date(), dri
       `Freshness filtering is off for this source until the mapping is fixed.`);
   }
 
-  const missRate = items.length ? failures.length / items.length : 0;
+  if (expiredCount) warnings.push(`${source}: skipped ${expiredCount} expired postings.`);
+
+  // Expired items are a correct outcome, not drift, so they are excluded from the
+  // miss rate that decides whether the actor's schema has changed.
+  const considered = Math.max(0, items.length - expiredCount);
+  const missRate = considered ? failures.length / considered : 0;
   // A proportion only means something with a sample behind it. Below ten items only
   // total failure counts as drift, so a single malformed listing in a thin result set
   // does not take the source down.
-  const totalDrift = items.length > 0 && failures.length === items.length;
-  const proportionalDrift = items.length >= 10 && missRate > driftTolerance;
+  const totalDrift = considered > 0 && failures.length === considered;
+  const proportionalDrift = considered >= 10 && missRate > driftTolerance;
   if (totalDrift || proportionalDrift) {
     const fields = [...new Set(failures.flatMap((f) => f.missing))];
     throw new SchemaDriftError(
@@ -314,7 +329,7 @@ export function normalizeAll(items, { source, actorConfig, now = new Date(), dri
   }
   for (const w of warnings) log.warn(w, { source });
 
-  return { posts, warnings, inventory, dropped: failures.length };
+  return { posts, warnings, inventory, dropped: failures.length, expired: expiredCount };
 }
 
 /**

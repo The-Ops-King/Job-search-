@@ -25,6 +25,7 @@ if (!actorConfig) {
   process.exit(1);
 }
 
+// Actors can set their own floor (Upwork rejects anything under 20).
 const input = buildInput(actorConfig, { query, maxItems: 5, remote: true, postedWithinDays: 7 });
 process.stdout.write(`actor: ${actorConfig.actorId}\ninput: ${JSON.stringify(input, null, 2)}\n\n`);
 

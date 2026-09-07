@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { RunBudget, rotateQueries, dayIndex } from '../src/lib/budget.js';
-import { collect } from '../src/sources/_shared.js';
+import { collect, buildInput } from '../src/sources/_shared.js';
 import { summarizeSpend, spendLines } from '../src/pipeline/spend.js';
 
 const actorConfig = {
@@ -181,5 +181,50 @@ describe('the cap is enforced during ingest, not after', () => {
     // so it must not throw the "all queries failed" error.
     await expect(collect({ source: 'indeed', client, actorConfig, queries, options, budget }))
       .resolves.toBeTruthy();
+  });
+});
+
+describe('cost accounting when the actor reports nothing', () => {
+  // The live probe returned usageTotalUsd of 0 from a run that plainly consumed
+  // results. Trusting it would leave the cap reading zero spend forever.
+  const queries = ['q1', 'q2', 'q3', 'q4'];
+  const options = { maxItems: 20, lookbackDays: 2, timeoutSecs: 60 };
+
+  it('falls back to the assumed rate so the cap still fires', async () => {
+    const client = fakeClient({ itemsPerQuery: 20, costPerItem: 0 }); // reports $0
+    const budget = new RunBudget({ capUsd: 0.15, assumedCostPer1k: 3, maxItemsPerQuery: 20 });
+    await collect({ source: 'indeed', client, actorConfig, queries, options, budget });
+
+    // 20 items at $3/1k is $0.06 a query, so two fit under $0.15 and two do not.
+    expect(budget.spent).toBeCloseTo(0.12, 5);
+    expect(client.calls).toHaveLength(2);
+    expect(budget.summary().queriesSkipped).toBe(2);
+  });
+
+  it('marks the figure as estimated so the digest does not present it as billed', async () => {
+    const client = fakeClient({ itemsPerQuery: 10, costPerItem: 0 });
+    const budget = new RunBudget({ capUsd: 10, assumedCostPer1k: 3, maxItemsPerQuery: 20 });
+    const result = await collect({ source: 'indeed', client, actorConfig, queries, options, budget });
+    expect(result.meta.queryStats.every((q) => q.costEstimated)).toBe(true);
+  });
+
+  it('prefers the actor’s own number whenever it reports one', async () => {
+    const client = fakeClient({ itemsPerQuery: 20, costPerItem: 0.01 }); // $0.20 a query
+    const budget = new RunBudget({ capUsd: 10, assumedCostPer1k: 3, maxItemsPerQuery: 20 });
+    const result = await collect({ source: 'indeed', client, actorConfig, queries, options, budget });
+    expect(result.meta.queryStats[0].costUsd).toBeCloseTo(0.20, 5);
+    expect(result.meta.queryStats[0].costEstimated).toBe(false);
+  });
+});
+
+describe('actor-imposed minimum on maxItems', () => {
+  it('raises maxItems to the actor floor, which Upwork enforces with a 400', () => {
+    const withFloor = { ...actorConfig, input: { ...actorConfig.input, minItems: 20 } };
+    expect(buildInput(withFloor, { query: 'x', maxItems: 5 }).n).toBe(20);
+    expect(buildInput(withFloor, { query: 'x', maxItems: 50 }).n).toBe(50);
+  });
+
+  it('leaves actors without a floor alone', () => {
+    expect(buildInput(actorConfig, { query: 'x', maxItems: 5 }).n).toBe(5);
   });
 });

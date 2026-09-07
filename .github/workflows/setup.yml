@@ -98,6 +98,9 @@ jobs:
           path: .probe/
           if-no-files-found: warn
           retention-days: 14
+          # .probe is a dot directory, and upload-artifact v4 excludes hidden files
+          # by default. Without this the upload silently finds nothing.
+          include-hidden-files: true
 
       - name: Create sheet tabs
         if: inputs.task == 'setup-sheet'
