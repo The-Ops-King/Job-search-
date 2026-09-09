@@ -1,10 +1,16 @@
 {
   "_README": [
-    "Every actorId and every field name below is UNVERIFIED. apify.com was unreachable",
-    "from the environment this was built in, so nothing here was checked against a live",
-    "actor. Run `npm run probe-actor -- <source>` with APIFY_TOKEN set: it runs the actor",
-    "once, saves the raw dataset to .probe/, and prints the real field inventory.",
-    "Then correct `input.fields` and `map` here. No code change is needed for a remap.",
+    "All three actors are verified against live runs as of 2026-09-09. Every input field",
+    "name comes from the actor's own declared input schema, and each source prints the",
+    "search it actually ran, because an actor silently ignoring an undeclared input",
+    "returns arbitrary listings that map perfectly and mean nothing. That happened three",
+    "times before the probe started reading schemas and quoting the search back.",
+    "",
+    "Re-verify after any change here: `npm run probe-actor -- <source>` with APIFY_TOKEN",
+    "set, or just push, which re-probes on its own. It runs the actor once, saves the raw",
+    "dataset to .probe/, prints the declared input schema, the real field inventory, and",
+    "the search the actor says it ran. Correct input.fields and map from that. No code",
+    "change is needed for a remap.",
     "",
     "input.fields maps our canonical knob -> the actor's own input key. null means the",
     "actor does not support that knob; the pipeline filters client-side where it can.",
@@ -88,7 +94,7 @@
     },
     "probe_note": "Rejects maxItems < 20 with a 400.",
     "costPer1kResults": 0.0025,
-    "verified_at": "2026-09-09, schema read from build 1.0.24. searchQueries confirmed as the search field.",
+    "verified_at": "2026-09-09, run KET5kiwzwB25KMiAy and later. Actor echoed \"[Query 1/1] Starting: 'sales operations'\", which is the proof that searchQueries is the right field: two earlier guesses produced \"No queries provided, fetching all jobs\" instead.",
     "unmapped_knobs": {
       "note": "Declared but not wired. budget is the interesting one: filtering low budgets at the source would stop us paying for $5 postings at all. Its enum values are not printed by the probe, so wiring it is a separate change with its own verification.",
       "available": [
@@ -215,7 +221,7 @@
     "schema_notes": "Rich schema. keyword is an array and is NOT sufficient on its own: the actor refuses to build a search URL from keywords alone and exits with zero results, billing nothing. It needs at least one location, hence locations: [\"United States\"] in the template. Also useful and safe: publishedAt (r86400/r604800/r2592000), jobTitleExclude, excludeRecruitingAgencies, companySizeMin/Max, workType. workType would filter to remote at source but its accepted values are not printed by the probe, so remote stays a client-side judgement rather than a third guess. salaryBase offers an enum topping out at exactly the 120000 salary floor and is deliberately NOT wired: LinkedIn salary filters act on stated salary, so it would drop every posting that omits pay, which is most of the good ones, and never rejecting on missing compensation is a rule this pipeline is built around.",
     "runEveryNDays": 2,
     "cadence_note": "Every other day, by request. The cost argument for it is gone now that the real rate is known: daily would be about $1.00 a run, well inside the cap. What it still buys is less duplicate churn, since LinkedIn has no result-level dedupe across runs and salaried postings turn over slowly. Set runEveryNDays to 1 for daily.",
-    "verified_at": "2026-09-09, live run oxNoH1jA2Iydh2uYl. 150 items, all mapped fields resolved, $0.0557 billed.",
+    "verified_at": "2026-09-09, build 0.0.48. Actor built https://www.linkedin.com/jobs/search?keywords=sales+operations&location=United+States&f_TPR=r604800 and returned 150 items for $0.064.",
     "mapping_notes": "From live runs: url/title/company/description/posted_at resolve 100%, comp_type_raw 100% via contractType, pay on about 61% of postings, poster_name on about 7%. salaryInfo is an array of amounts, [\"$116000\",\"$159500\"] on the sample, so it maps to comp_min and comp_max by index. Reading only element 0 would have taken the BOTTOM of the range as the whole figure and rejected a $116k-$159.5k posting against the $120k floor. The array carries no period, so a posting quoting a rate rather than a salary arrives as a bare number labelled Full-time; score.js treats an implausibly small annual figure as unknown rather than rejecting on it. There is no expired flag. workType is deliberately NOT mapped to remote: it carries the job function, \"Management and Manufacturing\" on the sample, not the workplace type its input-schema label implies, and it resolved on every item."
   },
   "indeed": {
@@ -298,7 +304,7 @@
     "defaults": {
       "comp_type": "salary"
     },
-    "verified_at": "2026-09-09, schema read from build 0.0.108",
+    "verified_at": "2026-09-09, build 0.0.108. Actor echoed \"Running site crawl country US, position sales operations, location Remote\". Schema read from the same build.",
     "costPer1kResults": 3,
     "schema_notes": "Declared inputs: position, maxItemsPerSearch, country, location, parseCompanyDetails, saveOnlyUniqueItems, followApplyRedirects, startUrls. We had been sending maxItems and maxDaysOld, neither of which is declared. There is no recency input at all, so freshness is client-side only and daily runs will re-fetch the same top results. That is the duplicate billing the spend report tracks."
   }

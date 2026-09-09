@@ -63,15 +63,14 @@ deletes or reorders what is already there.
 
 ## Before the first real run: verify the actors
 
-All three actors have now been probed against live runs, and every input field name in
-`config/actors.json` comes from the actor's own declared input schema rather than from
-a guess. Indeed and Upwork have returned real, correctly mapped results. LinkedIn has
-had its schema read and its inputs corrected but has not yet returned a result, so it
-is the one still to prove.
+All three actors are verified against live runs. Every input field name in
+`config/actors.json` comes from the actor's own declared input schema, and each one has
+returned correctly mapped results for a search it demonstrably ran.
 
-Guessing input field names failed three times before the probe started reading schemas.
-An undeclared input is not rejected: the actor accepts it, ignores it, and returns
-plausible-looking rubbish. Re-probe after any mapping change:
+That last clause is the part that took four attempts. An undeclared input is not
+rejected: the actor accepts it, ignores it, and returns arbitrary listings that map at
+100% and mean nothing, so a clean mapping report is not evidence the search worked. The
+probe now quotes each actor echoing the query back, which is. Re-probe after any change:
 
 ```bash
 npm run probe-actor -- indeed "sales operations"
