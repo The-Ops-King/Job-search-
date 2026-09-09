@@ -109,6 +109,19 @@ describe('rule 3: compensation floors', () => {
     expect(verdict.comp_flags).toContain(COMP_FLAG.UNKNOWN);
   });
 
+  it('rejects a fixed total that cannot reach the hourly floor at any hours', () => {
+    // A live probe returned a $5 fixed posting. No job takes under an hour, so the
+    // implied rate is bounded above by the total, and $5 can never reach $100/hr.
+    const verdict = scorePost(post({ comp_type: 'fixed', comp_max: 5, est_hours: null }), strong(), CONFIG);
+    expect(verdict.status).toBe(STATUS.REJECTED);
+    expect(verdict.hard_out_reason).toContain('at any number of hours');
+  });
+
+  it('still passes a fixed total at or above the floor with no hours given', () => {
+    expect(scorePost(post({ comp_type: 'fixed', comp_max: 100, est_hours: null }), strong(), CONFIG).status)
+      .toBe(STATUS.LEAD);
+  });
+
   it('never rejects for missing compensation, whatever the type', () => {
     for (const comp_type of ['salary', 'hourly', 'fixed', 'unknown']) {
       const verdict = scorePost(post({ comp_type, comp_min: null, comp_max: null }), strong(), CONFIG);

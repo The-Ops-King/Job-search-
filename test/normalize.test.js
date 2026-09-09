@@ -144,12 +144,22 @@ describe('normalizeAll against fixtures', () => {
     expect(post.url).toBe('https://indeed.com/viewjob?jk=aa11bb22cc33dd44');
   });
 
-  it('carries Upwork hourly range and estimated hours through', () => {
+  it('carries the Upwork hourly range through', () => {
     const [post] = normalizeAll(fixture('upwork'), { source: 'upwork', actorConfig: actors.upwork, now: NOW }).posts;
     expect(post.comp_type).toBe('hourly');
     expect(post.comp_min).toBe(85);
     expect(post.comp_max).toBe(150);
-    expect(post.est_hours).toBe(40);
+    // The actor exposes only a text duration band, never hours, so this stays null.
+    expect(post.est_hours).toBeNull();
+  });
+
+  it('reads the Upwork fixed amount and publish time, which the probe corrected', () => {
+    const posts = normalizeAll(fixture('upwork'), { source: 'upwork', actorConfig: actors.upwork, now: NOW }).posts;
+    const fixed = posts.find((p) => p.title.startsWith('High Ticket Closer'));
+    expect(fixed).toMatchObject({ comp_type: 'fixed', comp_max: 5000 });
+    expect(fixed.posted_at).toBe('2026-09-01T09:00:00.000Z');
+    // Upwork never exposes the client, so this must stay null rather than guess.
+    expect(fixed.company).toBeNull();
   });
 
   it('leaves company null when the board does not expose one', () => {

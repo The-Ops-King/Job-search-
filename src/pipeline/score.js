@@ -64,7 +64,16 @@ export function checkCompensation(post, config) {
       }
       return ok(`fixed budget implies ~${fmt(Math.round(implied))}/hr`);
     }
-    // Fixed price with no hour estimate: no way to imply a rate, so it passes.
+    // Fixed price with no hour estimate normally passes, because a rate cannot be
+    // implied. But a total budget below the hourly floor bounds the rate from above:
+    // no job takes less than an hour, so $5 total can never clear $100/hr whatever
+    // the hours turn out to be. The live probe returned exactly this, a $5 fixed
+    // posting, so it is worth catching rather than paying to classify.
+    if (top < config.fixed_price_hourly_floor) {
+      return no(
+        `fixed budget of ${fmt(top)} in total cannot reach the ` +
+        `${fmt(config.fixed_price_hourly_floor)}/hr floor at any number of hours`);
+    }
     flags.push(COMP_FLAG.UNKNOWN);
     return ok();
   }

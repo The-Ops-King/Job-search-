@@ -14,7 +14,7 @@
   ],
   "upwork": {
     "actorId": "devcake/upwork-jobs-scraper",
-    "verified": false,
+    "verified": true,
     "alternates": [
       "chronometrica/upwork-job-scraper",
       "josrade/upwork-jobs-scraper",
@@ -23,12 +23,13 @@
     "input": {
       "template": {},
       "fields": {
-        "query": "searchQuery",
+        "query": "queries",
         "maxItems": "maxItems",
         "remote": null,
         "postedWithinDays": null
       },
-      "minItems": 20
+      "minItems": 20,
+      "queryIsList": true
     },
     "map": {
       "url": [
@@ -42,17 +43,8 @@
         "jobTitle",
         "name"
       ],
-      "company": [
-        "client.name",
-        "clientName",
-        "companyName",
-        "company"
-      ],
-      "poster_name": [
-        "client.name",
-        "clientName",
-        "posterName"
-      ],
+      "company": [],
+      "poster_name": [],
       "description": [
         "description",
         "jobDescription",
@@ -60,48 +52,27 @@
         "text"
       ],
       "posted_at": [
+        "publishTime",
+        "createTime",
         "postedAt",
-        "publishedAt",
-        "createdAt",
-        "postedOn",
-        "datePosted"
+        "publishedAt"
       ],
       "comp_type_raw": [
-        "jobType",
-        "type",
-        "budgetType",
-        "paymentType"
+        "jobType"
       ],
       "comp_min": [
-        "hourlyBudgetMin",
-        "budget.min",
-        "hourlyRange.min",
-        "minBudget"
+        "hourlyMin",
+        "fixedAmount"
       ],
       "comp_max": [
-        "hourlyBudgetMax",
-        "budget.max",
-        "hourlyRange.max",
-        "maxBudget",
-        "amount",
-        "budget"
+        "hourlyMax",
+        "fixedAmount"
       ],
       "comp_text": [
-        "budgetText",
-        "salary",
-        "rate",
         "budget"
       ],
-      "est_hours": [
-        "estimatedHours",
-        "hoursPerWeek",
-        "workload"
-      ],
-      "location": [
-        "clientLocation",
-        "client.location.country",
-        "location"
-      ],
+      "est_hours": [],
+      "location": [],
       "remote": []
     },
     "required": [
@@ -114,7 +85,8 @@
       "comp_type": "unknown"
     },
     "probe_note": "Rejects maxItems < 20 with a 400.",
-    "costPer1kResults": 2.5
+    "costPer1kResults": 2.5,
+    "verified_at": "2026-09-07, ran but returned unrelated results; query field corrected from searchQuery to queries"
   },
   "linkedin": {
     "actorId": "smorgi_apps/linkedin-jobs-scraper",
@@ -133,12 +105,13 @@
     "input": {
       "template": {},
       "fields": {
-        "query": "keyword",
+        "query": "queries",
         "maxItems": "maxItems",
         "remote": "workplaceType",
         "postedWithinDays": "postedLimit"
       },
-      "remoteValue": "remote"
+      "remoteValue": "remote",
+      "queryIsList": true
     },
     "map": {
       "url": [

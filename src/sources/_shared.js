@@ -9,10 +9,13 @@ import { log } from '../lib/log.js';
  * where that is possible (recency) and accepts the looser result where it is not.
  */
 export function buildInput(actorConfig, { query, maxItems, remote, postedWithinDays }) {
-  const { template = {}, fields = {}, remoteValue, postedWithinDaysFormat } = actorConfig.input ?? {};
+  const { template = {}, fields = {}, remoteValue, postedWithinDaysFormat, queryIsList } = actorConfig.input ?? {};
   const input = { ...template };
 
-  if (fields.query) input[fields.query] = query;
+  // Several actors take a list of search terms rather than a single string. Sending
+  // a bare string where a list is expected is silently ignored by some of them, which
+  // is worse than a 400: the run succeeds and returns whatever it likes.
+  if (fields.query) input[fields.query] = queryIsList ? [query] : query;
   if (fields.maxItems) {
     // Upwork's actor 400s on maxItems below 20, so the floor belongs to the actor,
     // not to our config.

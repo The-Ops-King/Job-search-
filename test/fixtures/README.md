@@ -1,21 +1,23 @@
 # Fixtures
 
-`indeed.json` mirrors the real shape returned by `misceres/indeed-scraper`, build
-0.0.108, captured from a live probe on 2026-09-07. The field names, the null
-`postedAt` alongside a populated `postingDateParsed`, the `jobType` array and the
-`isExpired` flag are all as the actor actually emits them.
+`indeed.json` and `upwork.json` mirror the real shapes their actors emit, captured
+from live probes on 2026-09-07:
 
-`upwork.json` and `linkedin.json` are still hand-authored and prove only that the
-mapping layer works. Neither actor has produced output yet:
+- **Indeed** (`misceres/indeed-scraper`, build 0.0.108). Note `postedAt` is null on
+  every item while `postingDateParsed` carries the value, `jobType` is an array, and
+  `isExpired` is present. Every mapped field resolves at 100%.
+- **Upwork** (`devcake/upwork-jobs-scraper`). Pay is split across `hourlyMin`,
+  `hourlyMax` and `fixedAmount` with a `budget` string alongside; the date is
+  `publishTime`; there is no company, no location and no hours field, only a text
+  `duration` band. The $5 beta-reading row is real output, kept deliberately as the
+  case that proves a fixed total below the hourly floor gets rejected.
 
-- Upwork rejected the probe with `maxItems must be >= 20`. Re-probe now that the
-  actor's floor is honoured.
-- LinkedIn is a rental actor and returned `actor-is-not-rented`. It needs a paid
-  monthly rental or a different actor.
+`linkedin.json` is still hand-authored. That actor has not produced output yet: the
+first attempt returned `Field input.queries is required`, which is now corrected but
+unproven.
 
-To refresh any of them, run the `Setup and Probe` workflow with `probe-actors`. It
-saves raw output under `.probe/` and uploads it as a run artifact.
+To refresh any of them, run the `Setup and Probe` workflow with `probe-actors`. Raw
+output is saved under `.probe/` and uploaded as a run artifact.
 
-A test failing after you replace a fixture means the mapping in
-`config/actors.json` is wrong, which is exactly what you want to find out before a
-scheduled run does.
+A test failing after you replace a fixture means the mapping in `config/actors.json`
+is wrong, which is exactly what you want to find out before a scheduled run does.
