@@ -30,6 +30,56 @@ const input = buildInput(actorConfig, { query, maxItems: 5, remote: true, posted
 process.stdout.write(`actor: ${actorConfig.actorId}\ninput: ${JSON.stringify(input, null, 2)}\n\n`);
 
 const client = createApifyClient();
+
+/**
+ * Prints the actor's declared input schema.
+ *
+ * Guessing input field names has now failed twice on this actor: it accepted both
+ * `searchQuery` and `queries` without complaint, ignored them, and logged
+ * "No queries provided, fetching all jobs". A silently ignored input is worse than a
+ * 400, because the run succeeds and returns plausible-looking rubbish. The schema is
+ * published on the build, so read it rather than guess.
+ */
+async function printInputSchema(actorId) {
+  try {
+    const actor = await client.actor(actorId).get();
+    const buildId = actor?.taggedBuilds?.latest?.buildId;
+    if (!buildId) {
+      process.stdout.write('INPUT SCHEMA: no tagged latest build to read it from\n\n');
+      return;
+    }
+    const build = await client.build(buildId).get();
+    const raw = build?.inputSchema;
+    if (!raw) {
+      process.stdout.write('INPUT SCHEMA: build publishes none\n\n');
+      return;
+    }
+    const schema = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const props = schema.properties ?? {};
+    const required = new Set(schema.required ?? []);
+
+    process.stdout.write('INPUT SCHEMA (the actor\'s own declaration)\n');
+    for (const [key, spec] of Object.entries(props)) {
+      const bits = [
+        spec.type ?? '?',
+        required.has(key) ? 'REQUIRED' : '',
+        spec.default !== undefined ? `default=${JSON.stringify(spec.default)}` : '',
+        Array.isArray(spec.enum) ? `enum=${JSON.stringify(spec.enum.slice(0, 8))}` : '',
+      ].filter(Boolean).join(' ');
+      process.stdout.write(`  ${key.padEnd(26)} ${bits}\n`);
+      if (spec.title) process.stdout.write(`  ${''.padEnd(26)} "${spec.title}"\n`);
+    }
+    const unknown = Object.keys(input).filter((k) => !(k in props));
+    if (unknown.length) {
+      process.stdout.write(`\n  SENT BUT NOT IN SCHEMA (silently ignored): ${unknown.join(', ')}\n`);
+    }
+    process.stdout.write('\n');
+  } catch (error) {
+    process.stdout.write(`INPUT SCHEMA: could not read it (${error.message})\n\n`);
+  }
+}
+
+await printInputSchema(actorConfig.actorId);
 const { items, meta } = await runActor(client, actorConfig.actorId, input, { timeoutSecs: 240 });
 
 await mkdir(new URL('../.probe/', import.meta.url), { recursive: true });

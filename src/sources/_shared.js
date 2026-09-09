@@ -39,6 +39,19 @@ export function buildInput(actorConfig, { query, maxItems, remote, postedWithinD
  */
 export async function collect({ source, client, actorConfig, queries, options, now = new Date(), budget = null, rotation = 0 }) {
   const { maxItems, lookbackDays, remote = true, timeoutSecs } = options;
+
+  // A source whose search field is unknown returns arbitrary listings, which costs
+  // money and pollutes the sheet with noise the classifier then pays to reject.
+  // Skipping loudly beats running blind.
+  if (actorConfig.blocked) {
+    log.warn('source skipped', { source, reason: actorConfig.blocked });
+    return {
+      source,
+      posts: [],
+      meta: { actorId: actorConfig.actorId, blocked: true, queryStats: [], costUsd: 0, rawItems: 0 },
+      warnings: [`${source}: skipped. ${actorConfig.blocked}`],
+    };
+  }
   const rawItems = [];
   const queryErrors = [];
   const metas = [];

@@ -249,3 +249,30 @@ describe('per-actor billing rates', () => {
     expect(budget.spent).toBeCloseTo(0.30, 5);
   });
 });
+
+describe('a source with an unknown search field', () => {
+  const options = { maxItems: 20, lookbackDays: 2, timeoutSecs: 60 };
+
+  it('is skipped rather than run blind', async () => {
+    // Upwork accepted two different guessed query fields, ignored both, and returned
+    // arbitrary listings. Running it costs money and fills the sheet with noise.
+    const blocked = { ...actorConfig, blocked: 'search field unknown' };
+    const client = fakeClient({ itemsPerQuery: 20 });
+    const budget = new RunBudget({ capUsd: 10, assumedCostPer1k: 3, maxItemsPerQuery: 20 });
+
+    const result = await collect({ source: 'upwork', client, actorConfig: blocked, queries: ['q1', 'q2'], options, budget });
+
+    expect(client.calls).toHaveLength(0);
+    expect(budget.spent).toBe(0);
+    expect(result.posts).toEqual([]);
+    expect(result.warnings.join(' ')).toContain('search field unknown');
+    expect(result.meta.blocked).toBe(true);
+  });
+
+  it('still runs a source that is not blocked', async () => {
+    const client = fakeClient({ itemsPerQuery: 5 });
+    const result = await collect({ source: 'indeed', client, actorConfig, queries: ['q1'], options });
+    expect(client.calls).toHaveLength(1);
+    expect(result.meta.blocked).toBeUndefined();
+  });
+});
