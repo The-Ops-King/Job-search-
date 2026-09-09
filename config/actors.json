@@ -21,7 +21,9 @@
       "neatrat/upwork-job-scraper"
     ],
     "input": {
-      "template": {},
+      "template": {
+        "sortBy": "recency+desc"
+      },
       "fields": {
         "query": "queries",
         "maxItems": "maxItems",
@@ -86,7 +88,18 @@
     },
     "probe_note": "Rejects maxItems < 20 with a 400.",
     "costPer1kResults": 2.5,
-    "verified_at": "2026-09-07, ran but returned unrelated results; query field corrected from searchQuery to queries"
+    "verified_at": "2026-09-07, ran but returned unrelated results; query field corrected from searchQuery to queries",
+    "unmapped_knobs": {
+      "note": "Documented on the actor but not wired up. Budget Range is the interesting one: filtering low budgets at the source would stop us paying for $5 postings at all.",
+      "available": [
+        "Job Type",
+        "Experience Level",
+        "Workload",
+        "Project Duration",
+        "Budget Range",
+        "Client Hiring History"
+      ]
+    }
   },
   "linkedin": {
     "actorId": "smorgi_apps/linkedin-jobs-scraper",
