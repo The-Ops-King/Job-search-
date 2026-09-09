@@ -18,8 +18,8 @@
   "max_apify_cost_per_run": 3,
   "assumed_cost_per_1k_results": 3,
   "apify_budget_shares": {
-    "linkedin": 0.55,
-    "indeed": 0.4,
-    "upwork": 0.05
+    "indeed": 0.45,
+    "linkedin": 0.45,
+    "upwork": 0.1
   }
 }

@@ -16,14 +16,15 @@ up from it. Re-running the same day adds no rows and sends no second email.
 
 ## What it costs to run
 
-At most $90 a month, all of it Apify, and it is capped per run so it cannot go higher
-without you raising the cap. Most runs will cost well under the cap, because two of the
-three sources are cheap and the third only runs every other day.
+About $47 a month, all of it Apify, with a hard per-run cap that makes $90 the absolute
+worst case. Measured rates, not estimates: a full pass over every query on every source
+comes to about $2.08 on the days LinkedIn runs and about $1.08 on the days it does not,
+against a $3.00 cap.
 
 | | |
 | --- | --- |
 | Claude | $0. Runs on a Claude subscription through headless Claude Code |
-| Apify | capped at `max_apify_cost_per_run`, $3.00 a run, so at most $90 a month daily |
+| Apify | about $1.50 a run in practice, hard-capped at $3.00 by `max_apify_cost_per_run` |
 | Google Sheets | $0 |
 | GitHub Actions | $0. Public repo is unlimited; a private repo gets 2,000 minutes a month, and the Apify budget cap keeps runs short enough to stay inside that |
 | Email | $0, because sending is off |
@@ -245,26 +246,28 @@ actor's own rate first.
 
 ### Why the budget is split per source, and why LinkedIn runs every other day
 
-The three actors do not cost remotely the same. Upwork bills about $0.0025 per thousand
-results, which is nothing. Indeed is around $3. LinkedIn's actor refuses to return fewer
-than 150 results per query at roughly $6 per thousand, so one LinkedIn query is about
-$0.90, fifteen times an Indeed query.
+The three actors do not cost the same, and only two of the three rates are measured.
+Upwork bills $0.0025 per thousand results, which is nothing. LinkedIn bills $0.371 per
+thousand but returns 150 per query, so a query is about six cents. Indeed reports zero
+cost on every run, which cannot be right, so it falls back to the assumed $3.00 per
+thousand and is the one number still to confirm against the Apify dashboard.
 
-A single first-come-first-served pot would let LinkedIn spend the entire run budget
-before Indeed ran at all, and Indeed is the verified source. So the cap is split by
-`apify_budget_shares` in `config/scoring.json`, and a source cannot borrow from
-another's slice.
+A single first-come-first-served pot would let one source spend the entire run budget
+before another ran at all. So the cap is split by `apify_budget_shares` in
+`config/scoring.json`, and a source cannot borrow from another's slice. Each share is
+sized to cover that source's full query pass with headroom, so in normal running the
+shares never bite; they exist to contain a source whose cost suddenly changes.
 
 Shares are normalized across the sources actually running. A source that is blocked, or
 not scheduled today, releases its slice to the others rather than leaving it idle, so on
 the days LinkedIn sits out Indeed gets almost the whole cap.
 
-LinkedIn carries `runEveryNDays: 2` in `config/actors.json`. Salaried postings turn over
-slowly and Indeed covers the same market daily, so the freshness lost is small and the
-halved cost is not. The cadence is keyed off the calendar day number rather than a
-counter, so a failed or skipped run cannot drift it, and the lookback widens
-automatically by the days a source sat out so a missed run cannot lose a day of
-postings.
+LinkedIn carries `runEveryNDays: 2` in `config/actors.json`. The cost argument for that
+is gone now that its real rate is known, but it still cuts duplicate churn: LinkedIn has
+no result-level dedupe across runs and salaried postings turn over slowly. Set it to 1
+for daily. The cadence is keyed off the calendar day number rather than a counter, so a
+failed or skipped run cannot drift it, and the lookback widens automatically by the days
+a source sat out so a missed run cannot lose a day of postings.
 
 This matters because the other cost guard, `max_daily_cost`, runs after ingest and
 before enrichment. For Apify that is too late. By the time it fires, the results are
@@ -274,9 +277,9 @@ When the cap cuts a run short the remaining queries are deferred, not dropped. Q
 order rotates by day, so anything skipped runs first next time and full coverage comes
 back over a couple of runs. The digest says how many were deferred.
 
-Uncapped, the shipped query set would run to roughly $250 a month, most of it LinkedIn
-at its 150-result floor. The cap and the shares are what keep that from happening; raise
-them deliberately if you want more coverage per run.
+The cap has headroom on purpose. It is not there to trim normal running, which fits
+inside it; it is there so that an actor changing its pricing, or a query suddenly
+returning far more than expected, costs you one query rather than a month's budget.
 
 Every run also reports what each query cost, which returned nothing, which hit the
 result cap, and the cost per post that survived dedupe. Read that block in the first

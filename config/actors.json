@@ -106,9 +106,9 @@
   },
   "linkedin": {
     "actorId": "cheap_scraper/linkedin-job-scraper",
-    "verified": false,
-    "costPer1kResults": 6,
-    "pricing_note": "Pay per result, dedupes server-side, and refuses maxItems below 150. At the assumed $6/1k that is up to $0.90 for one query against a $3.00 run cap, so it runs every other day on a 40% share rather than daily. costPer1kResults is inherited from the retired smorgi_apps actor and is still a guess; the first real run replaces it with the reported figure.",
+    "verified": true,
+    "costPer1kResults": 0.371,
+    "pricing_note": "Measured, not assumed: 150 results billed $0.0557, which is $0.371 per thousand. The previous $6.00 figure was inherited from the retired smorgi_apps actor and was sixteen times too high. At the real rate a 150-result query costs about six cents and a full eighteen-query pass is about $1.00.",
     "alternates": [
       "magicfingers/linkedin-jobs-scraper",
       "curious_coder/linkedin-jobs-scraper",
@@ -147,7 +147,8 @@
           "r2592000"
         ]
       ],
-      "minItems": 150
+      "minItems": 150,
+      "minItems_note": "An earlier 400 suggested the actor enforces this floor. Not re-tested, and not worth re-testing: 150 fresh results cost about six cents, which is better coverage per dollar than a smaller page."
     },
     "map": {
       "url": [
@@ -167,9 +168,7 @@
         "company"
       ],
       "poster_name": [
-        "posterFullName",
-        "hiringManager",
-        "posterName"
+        "posterFullName"
       ],
       "description": [
         "descriptionText",
@@ -177,46 +176,29 @@
         "jobDescription"
       ],
       "posted_at": [
-        "postedAt",
         "publishedAt",
+        "postedAt",
         "listedAt",
-        "postedDate",
-        "datePosted"
+        "postedDate"
       ],
       "comp_type_raw": [
-        "employmentType",
-        "salaryType",
-        "jobType[0]"
+        "contractType"
       ],
-      "comp_min": [
-        "salaryMin",
-        "compensation.min"
-      ],
-      "comp_max": [
-        "salaryMax",
-        "compensation.max"
-      ],
+      "comp_min": [],
+      "comp_max": [],
       "comp_text": [
+        "salaryInfo[0]",
         "salary",
-        "salaryText",
-        "compensation"
+        "salaryText"
       ],
       "est_hours": [],
       "location": [
-        "location",
-        "jobLocation",
-        "formattedLocation"
-      ],
-      "remote": [
-        "workplaceType",
-        "workType",
-        "isRemote",
         "location"
       ],
-      "expired": [
-        "isExpired",
-        "expired"
-      ]
+      "remote": [
+        "location"
+      ],
+      "expired": []
     },
     "required": [
       "url",
@@ -228,8 +210,9 @@
     },
     "schema_notes": "Rich schema. keyword is an array and is NOT sufficient on its own: the actor refuses to build a search URL from keywords alone and exits with zero results, billing nothing. It needs at least one location, hence locations: [\"United States\"] in the template. Also useful and safe: publishedAt (r86400/r604800/r2592000), jobTitleExclude, excludeRecruitingAgencies, companySizeMin/Max, workType. workType would filter to remote at source but its accepted values are not printed by the probe, so remote stays a client-side judgement rather than a third guess. salaryBase offers an enum topping out at exactly the 120000 salary floor and is deliberately NOT wired: LinkedIn salary filters act on stated salary, so it would drop every posting that omits pay, which is most of the good ones, and never rejecting on missing compensation is a rule this pipeline is built around.",
     "runEveryNDays": 2,
-    "cadence_note": "Every other day. Salaried postings turn over slowly and Indeed covers the same market daily, so the lost freshness is small and the halved cost is not. The lookback widens by the skipped day automatically, so a failed run cannot lose a day of postings.",
-    "verified_at": "2026-09-09, schema read from build 0.0.48. Ran clean and returned zero items for keyword-without-location, at a cost of $0."
+    "cadence_note": "Every other day, by request. The cost argument for it is gone now that the real rate is known: daily would be about $1.00 a run, well inside the cap. What it still buys is less duplicate churn, since LinkedIn has no result-level dedupe across runs and salaried postings turn over slowly. Set runEveryNDays to 1 for daily.",
+    "verified_at": "2026-09-09, live run oxNoH1jA2Iydh2uYl. 150 items, all mapped fields resolved, $0.0557 billed.",
+    "mapping_notes": "From the live run: url/title/company/description/posted_at all resolve 100%, poster_name on about 9% of items. LinkedIn returns no numeric salary fields at all, only salaryInfo, which is an empty array on most postings; comp is therefore usually unknown, which never rejects. There is no expired flag. workType is deliberately NOT mapped to remote: it carries the job function, not the workplace type, so it resolved on every item and would have made every posting look remote."
   },
   "indeed": {
     "actorId": "misceres/indeed-scraper",
