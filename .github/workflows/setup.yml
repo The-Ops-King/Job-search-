@@ -134,7 +134,15 @@ jobs:
             for source in upwork linkedin indeed; do
               echo "$source"
               grep -E '^(returned|No items|actor: )' "/tmp/$source.log" | sed 's/^/  /' || true
-              grep -E '(NO HIT|[0-9]+% via)' "/tmp/$source.log" | sed 's/^ */  /' || true
+
+              # Proof the search term reached the actor. Three times now an actor has
+              # accepted an undeclared input, ignored it, and returned arbitrary
+              # listings that map perfectly and mean nothing. A 100% mapping is not
+              # evidence the search worked; the actor echoing the query back is.
+              grep -oE "(No queries provided[^\"]*|\[Query [0-9/]+\] Starting: '[^']*'|Jobs found for .*|Generated [0-9]+ LinkedIn Search URL|https://www\.linkedin\.com/jobs/search\?[^ ]*|Running site crawl .*)" "/tmp/$source.log" \
+                | head -4 | sed 's/^/  search: /' || true
+
+              grep -E '(NO HIT|[0-9]+% via)' "/tmp/$source.log" | grep -v 'Fix any NO HIT' | sed 's/^ */  /' || true
               grep -oE 'SENT BUT NOT IN SCHEMA.*' "/tmp/$source.log" | sed 's/^/  /' || true
               echo
             done
