@@ -24,10 +24,20 @@ export function buildInput(actorConfig, { query, maxItems, remote, postedWithinD
   }
   if (fields.remote && remote) input[fields.remote] = remoteValue ?? true;
   if (fields.postedWithinDays && postedWithinDays) {
-    input[fields.postedWithinDays] = postedWithinDaysFormat
-      ? postedWithinDaysFormat.replace('{seconds}', String(postedWithinDays * 86400))
-                              .replace('{days}', String(postedWithinDays))
-      : postedWithinDays;
+    const { postedWithinDaysEnum } = actorConfig.input ?? {};
+    if (postedWithinDaysEnum) {
+      // Some actors take a fixed set of windows rather than a day count. Round up to
+      // the narrowest window that still covers the lookback, so nothing is missed.
+      const match = postedWithinDaysEnum.find(([days]) => postedWithinDays <= days)
+        ?? postedWithinDaysEnum[postedWithinDaysEnum.length - 1];
+      input[fields.postedWithinDays] = match[1];
+    } else if (postedWithinDaysFormat) {
+      input[fields.postedWithinDays] = postedWithinDaysFormat
+        .replace('{seconds}', String(postedWithinDays * 86400))
+        .replace('{days}', String(postedWithinDays));
+    } else {
+      input[fields.postedWithinDays] = postedWithinDays;
+    }
   }
   return input;
 }

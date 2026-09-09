@@ -276,3 +276,32 @@ describe('a source with an unknown search field', () => {
     expect(result.meta.blocked).toBeUndefined();
   });
 });
+
+describe('enum-bucketed recency windows', () => {
+  // cheap_scraper's LinkedIn actor takes r86400 / r604800 / r2592000, not a day
+  // count. Rounding down would silently narrow the search and lose postings.
+  const withEnum = {
+    ...actorConfig,
+    input: {
+      template: {},
+      fields: { query: 'q', maxItems: 'n', postedWithinDays: 'publishedAt' },
+      postedWithinDaysEnum: [[1, 'r86400'], [7, 'r604800'], [30, 'r2592000']],
+    },
+  };
+  const build = (days) => buildInput(withEnum, { query: 'x', maxItems: 5, postedWithinDays: days }).publishedAt;
+
+  it('rounds up to the narrowest window that still covers the lookback', () => {
+    expect(build(1)).toBe('r86400');
+    expect(build(2)).toBe('r604800');
+    expect(build(7)).toBe('r604800');
+    expect(build(14)).toBe('r2592000');
+  });
+
+  it('falls back to the widest window rather than dropping the filter', () => {
+    expect(build(365)).toBe('r2592000');
+  });
+
+  it('omits the field when no lookback is requested', () => {
+    expect(buildInput(withEnum, { query: 'x', maxItems: 5 }).publishedAt).toBeUndefined();
+  });
+});

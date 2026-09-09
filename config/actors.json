@@ -115,15 +115,31 @@
       "smorgi_apps/linkedin-jobs-scraper": "Permanently offline. Actor throws on start: \"residential + Playwright unit economics; historical success below the keep gate. Not scheduled to return.\""
     },
     "input": {
-      "template": {},
+      "template": {
+        "saveOnlyUniqueItems": true
+      },
       "fields": {
         "query": "keyword",
         "maxItems": "maxItems",
         "remote": null,
-        "postedWithinDays": null
+        "postedWithinDays": "publishedAt"
       },
-      "remoteValue": "remote",
-      "queryIsList": true
+      "queryIsList": true,
+      "postedWithinDaysEnum": [
+        [
+          1,
+          "r86400"
+        ],
+        [
+          7,
+          "r604800"
+        ],
+        [
+          30,
+          "r2592000"
+        ]
+      ],
+      "minItems": 150
     },
     "map": {
       "url": [
@@ -201,7 +217,9 @@
     ],
     "defaults": {
       "comp_type": "salary"
-    }
+    },
+    "blocked": "Enforces maxItems >= 150 per query. At roughly $6/1k that is about $0.90 a query against a $0.60 cap for the whole run, so the budget guard would refuse every query and the source would silently never run. Needs a cost decision.",
+    "schema_notes": "Rich schema. Useful and safe: publishedAt (r86400/r604800/r2592000), jobTitleExclude, excludeRecruitingAgencies, companySizeMin/Max, workType. salaryBase (enum up to 120000) matches the salary floor exactly but is NOT wired on purpose: LinkedIn salary filters act on stated salary, so it would drop every posting that omits pay, which is most of the good ones, and that contradicts the rule that missing compensation never rejects."
   },
   "indeed": {
     "actorId": "misceres/indeed-scraper",
@@ -219,9 +237,9 @@
       },
       "fields": {
         "query": "position",
-        "maxItems": "maxItems",
+        "maxItems": "maxItemsPerSearch",
         "remote": "location",
-        "postedWithinDays": "maxDaysOld"
+        "postedWithinDays": null
       },
       "remoteValue": "Remote"
     },
@@ -283,7 +301,8 @@
     "defaults": {
       "comp_type": "salary"
     },
-    "verified_at": "2026-09-07, build 0.0.108, 5/5 items",
-    "costPer1kResults": 3.0
+    "verified_at": "2026-09-09, schema read from build 0.0.108",
+    "costPer1kResults": 3.0,
+    "schema_notes": "Declared inputs: position, maxItemsPerSearch, country, location, parseCompanyDetails, saveOnlyUniqueItems, followApplyRedirects, startUrls. We had been sending maxItems and maxDaysOld, neither of which is declared. There is no recency input at all, so freshness is client-side only and daily runs will re-fetch the same top results. That is the duplicate billing the spend report tracks."
   }
 }
