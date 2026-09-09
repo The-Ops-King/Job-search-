@@ -22,6 +22,18 @@ on:
         required: false
         default: 'sales operations'
 
+  # A mapping change is exactly when the mapping needs re-verifying, so editing
+  # config/actors.json re-probes on its own. The path filter is the point: an
+  # unfiltered trigger would spend Apify credit on every unrelated commit.
+  push:
+    branches:
+      - 'claude/**'
+      - main
+    paths:
+      - 'config/actors.json'
+      - 'src/sources/**'
+      - 'scripts/probe-actor.js'
+
 concurrency:
   group: opportunity-finder
   cancel-in-progress: false
@@ -50,20 +62,41 @@ jobs:
 
       - run: npm ci
 
+      # A push carries no workflow inputs, so the task has to be resolved rather than
+      # read straight from inputs.
+      - name: Resolve task
+        id: task
+        shell: bash
+        run: |
+          echo "name=${{ inputs.task || 'probe-actors' }}" >> "$GITHUB_OUTPUT"
+          echo "query=${{ inputs.query || 'sales operations' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip when Apify is not configured
+        id: configured
+        shell: bash
+        run: |
+          if [ -n "$APIFY_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "APIFY_TOKEN is not set, so there is nothing to probe. This run is a no-op." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Install Claude Code
-        if: inputs.task == 'run-once-no-send' && env.LLM_BACKEND != 'api'
+        if: steps.task.outputs.name == 'run-once-no-send' && env.LLM_BACKEND != 'api'
         run: npm install -g @anthropic-ai/claude-code
 
       # Probes each actor once on five results. Costs a few cents of Apify credit and
       # prints which mapped fields in config/actors.json actually resolve.
       - name: Probe actors
-        if: inputs.task == 'probe-actors'
+        if: steps.task.outputs.name == 'probe-actors' && steps.configured.outputs.ready == 'true'
         shell: bash
         run: |
           {
             echo '## Actor probe results'
             echo
-            echo 'Paste this whole block back into the Claude session.'
+            echo "commit: ${{ github.sha }}"
+            echo "query: ${{ steps.task.outputs.query }}"
             echo
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -75,7 +108,7 @@ jobs:
             # Output is captured to a file rather than piped, so node's exit code
             # survives. A dead actor id is itself a finding and must not read as
             # success, and one failing source must not stop the other two.
-            if node scripts/probe-actor.js "$source" "${{ inputs.query }}" > "/tmp/$source.log" 2>&1; then
+            if node scripts/probe-actor.js "$source" "${{ steps.task.outputs.query }}" > "/tmp/$source.log" 2>&1; then
               status="ok"
             else
               status="FAILED (exit $?)"
@@ -91,7 +124,7 @@ jobs:
           done
 
       - name: Upload raw actor output
-        if: inputs.task == 'probe-actors'
+        if: steps.task.outputs.name == 'probe-actors' && steps.configured.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: probe-raw-output
@@ -103,12 +136,12 @@ jobs:
           include-hidden-files: true
 
       - name: Create sheet tabs
-        if: inputs.task == 'setup-sheet'
+        if: steps.task.outputs.name == 'setup-sheet'
         shell: bash
         run: |
           set -o pipefail
           node scripts/setup-sheet.js 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run pipeline without sending
-        if: inputs.task == 'run-once-no-send'
+        if: steps.task.outputs.name == 'run-once-no-send'
         run: node scripts/run-once.js --skip-send
