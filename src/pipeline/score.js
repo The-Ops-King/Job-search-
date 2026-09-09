@@ -9,7 +9,18 @@ import { STATUS, TRACK } from '../sheets/schema.js';
  * postings omit pay, and rejecting on absence would throw away the best leads.
  */
 
-export const COMP_FLAG = { UNKNOWN: 'comp_unknown' };
+export const COMP_FLAG = { UNKNOWN: 'comp_unknown', IMPLAUSIBLE: 'comp_implausible' };
+
+/**
+ * Below this, a figure labelled as an annual salary is not one.
+ *
+ * LinkedIn publishes pay as a bare array of amounts with no period attached, so a
+ * posting quoting a rate rather than a salary arrives labelled "Full-time" with a
+ * number like 150 in it. Rejecting that against the annual floor would silently drop
+ * a $150/hr role. No annual salary for the work in scope lives down here, so a figure
+ * this low means the period was lost, not that the job pays it.
+ */
+const IMPLAUSIBLE_ANNUAL_SALARY = 15000;
 
 export function fitScore(capability, ownership) {
   const cap = clamp(capability);
@@ -38,6 +49,12 @@ export function checkCompensation(post, config) {
 
   if (type === 'salary') {
     if (top === null) { flags.push(COMP_FLAG.UNKNOWN); return ok(); }
+    // Treated as no compensation at all rather than as a rejection, because missing
+    // compensation never rejects and a number whose period was lost is missing.
+    if (top < IMPLAUSIBLE_ANNUAL_SALARY) {
+      flags.push(COMP_FLAG.UNKNOWN, COMP_FLAG.IMPLAUSIBLE);
+      return ok();
+    }
     if (top < config.salary_floor_annual) {
       return no(`salary ${fmt(top)} is below the ${fmt(config.salary_floor_annual)} floor`);
     }

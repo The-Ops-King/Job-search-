@@ -123,6 +123,25 @@ jobs:
             echo "::endgroup::"
           done
 
+          # A compact digest at the very END of the step. The full output is three
+          # actor schemas and hundreds of crawler lines, and reading it back costs more
+          # than it tells you. This is the part worth reading: what each actor returned,
+          # what it billed, and which mapped fields did not resolve.
+          echo "::group::summary"
+          {
+            echo "### summary"
+            echo '```'
+            for source in upwork linkedin indeed; do
+              echo "$source"
+              grep -E '^(returned|No items|actor: )' "/tmp/$source.log" | sed 's/^/  /' || true
+              grep -E '(NO HIT|[0-9]+% via)' "/tmp/$source.log" | sed 's/^ */  /' || true
+              grep -oE 'SENT BUT NOT IN SCHEMA.*' "/tmp/$source.log" | sed 's/^/  /' || true
+              echo
+            done
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::endgroup::"
+
       - name: Upload raw actor output
         if: steps.task.outputs.name == 'probe-actors' && steps.configured.outputs.ready == 'true'
         uses: actions/upload-artifact@v4

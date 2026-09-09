@@ -275,3 +275,45 @@ describe('normalizeItem', () => {
     expect(missing).toContain('description');
   });
 });
+
+describe('LinkedIn publishes pay as an array of amounts', () => {
+  // salaryInfo came back as ["$116000","$159500"] on a live run. Reading only element
+  // zero would take the BOTTOM of the range as the whole figure, and a $116k-$159.5k
+  // posting would then be rejected against the $120k floor.
+  const linkedinConfig = {
+    map: {
+      url: ['jobUrl'], title: ['jobTitle'], description: ['jobDescription'],
+      comp_type_raw: ['contractType'],
+      comp_min: ['salaryInfo[0]'],
+      comp_max: ['salaryInfo[1]'],
+      comp_text: ['salaryInfo'],
+    },
+    required: ['url', 'title', 'description'],
+    defaults: { comp_type: 'salary' },
+  };
+  const item = (over = {}) => ({
+    jobUrl: 'https://www.linkedin.com/jobs/view/1', jobTitle: 'Revenue Operations',
+    jobDescription: 'a description', contractType: 'Full-time', ...over,
+  });
+  const norm = (over) => normalizeAll([item(over)], { source: 'linkedin', actorConfig: linkedinConfig, now: new Date() }).posts[0];
+
+  it('reads both ends of the range, not just the first', () => {
+    const post = norm({ salaryInfo: ['$116000', '$159500'] });
+    expect(post.comp_min).toBe(116000);
+    expect(post.comp_max).toBe(159500);
+    expect(post.comp_type).toBe('salary');
+  });
+
+  it('handles a single amount without inventing a second', () => {
+    const post = norm({ salaryInfo: ['$140000'] });
+    expect(post.comp_min).toBe(140000);
+    expect(post.comp_max).toBe(140000);
+  });
+
+  it('reports unknown compensation for the empty array most postings carry', () => {
+    const post = norm({ salaryInfo: [] });
+    expect(post.comp_min).toBeNull();
+    expect(post.comp_max).toBeNull();
+    expect(post.comp_type).toBe('unknown');
+  });
+});

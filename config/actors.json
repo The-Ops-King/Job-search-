@@ -184,10 +184,14 @@
       "comp_type_raw": [
         "contractType"
       ],
-      "comp_min": [],
-      "comp_max": [],
+      "comp_min": [
+        "salaryInfo[0]"
+      ],
+      "comp_max": [
+        "salaryInfo[1]"
+      ],
       "comp_text": [
-        "salaryInfo[0]",
+        "salaryInfo",
         "salary",
         "salaryText"
       ],
@@ -212,7 +216,7 @@
     "runEveryNDays": 2,
     "cadence_note": "Every other day, by request. The cost argument for it is gone now that the real rate is known: daily would be about $1.00 a run, well inside the cap. What it still buys is less duplicate churn, since LinkedIn has no result-level dedupe across runs and salaried postings turn over slowly. Set runEveryNDays to 1 for daily.",
     "verified_at": "2026-09-09, live run oxNoH1jA2Iydh2uYl. 150 items, all mapped fields resolved, $0.0557 billed.",
-    "mapping_notes": "From the live run: url/title/company/description/posted_at all resolve 100%, poster_name on about 9% of items. LinkedIn returns no numeric salary fields at all, only salaryInfo, which is an empty array on most postings; comp is therefore usually unknown, which never rejects. There is no expired flag. workType is deliberately NOT mapped to remote: it carries the job function, not the workplace type, so it resolved on every item and would have made every posting look remote."
+    "mapping_notes": "From live runs: url/title/company/description/posted_at resolve 100%, comp_type_raw 100% via contractType, pay on about 61% of postings, poster_name on about 7%. salaryInfo is an array of amounts, [\"$116000\",\"$159500\"] on the sample, so it maps to comp_min and comp_max by index. Reading only element 0 would have taken the BOTTOM of the range as the whole figure and rejected a $116k-$159.5k posting against the $120k floor. The array carries no period, so a posting quoting a rate rather than a salary arrives as a bare number labelled Full-time; score.js treats an implausibly small annual figure as unknown rather than rejecting on it. There is no expired flag. workType is deliberately NOT mapped to remote: it carries the job function, \"Management and Manufacturing\" on the sample, not the workplace type its input-schema label implies, and it resolved on every item."
   },
   "indeed": {
     "actorId": "misceres/indeed-scraper",

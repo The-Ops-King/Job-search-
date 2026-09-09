@@ -189,3 +189,34 @@ describe('robustness', () => {
     expect(verdict.status).toBe(STATUS.REJECTED);
   });
 });
+
+describe('a salary figure whose period was lost', () => {
+  // LinkedIn publishes pay as a bare array of amounts with no period attached, and
+  // labels almost everything "Full-time". A posting quoting $150/hr therefore arrives
+  // as comp_type salary with comp_max 150. Rejecting that against the $120,000 floor
+  // would silently drop one of the best-paying leads on the board.
+  it('does not reject an implausibly small annual salary, it treats it as unknown', () => {
+    const verdict = scorePost(post({ comp_type: 'salary', comp_min: 100, comp_max: 150 }), strong(), CONFIG);
+    expect(verdict.status).toBe(STATUS.LEAD);
+    expect(verdict.comp_flags).toContain(COMP_FLAG.UNKNOWN);
+    expect(verdict.comp_flags).toContain(COMP_FLAG.IMPLAUSIBLE);
+  });
+
+  it('still rejects a real salary that is merely low', () => {
+    // $80,000 is a plausible annual figure and genuinely below the floor.
+    const verdict = scorePost(post({ comp_type: 'salary', comp_max: 80000 }), strong(), CONFIG);
+    expect(verdict.status).toBe(STATUS.REJECTED);
+    expect(verdict.comp_flags).not.toContain(COMP_FLAG.IMPLAUSIBLE);
+  });
+
+  it('draws the line where no real annual salary lives', () => {
+    expect(scorePost(post({ comp_type: 'salary', comp_max: 14999 }), strong(), CONFIG).status).toBe(STATUS.LEAD);
+    expect(scorePost(post({ comp_type: 'salary', comp_max: 15000 }), strong(), CONFIG).status).toBe(STATUS.REJECTED);
+  });
+
+  it('leaves hourly and fixed alone, where small numbers are meaningful', () => {
+    // $150/hr correctly labelled must pass, and $150 fixed must still fail.
+    expect(scorePost(post({ comp_type: 'hourly', comp_max: 150 }), strong(), CONFIG).status).toBe(STATUS.LEAD);
+    expect(scorePost(post({ comp_type: 'fixed', comp_max: 50 }), strong(), CONFIG).status).toBe(STATUS.REJECTED);
+  });
+});
