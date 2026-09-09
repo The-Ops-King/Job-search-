@@ -33,6 +33,9 @@ on:
       - 'config/actors.json'
       - 'src/sources/**'
       - 'scripts/probe-actor.js'
+      # Changing the probe is itself a reason to re-probe, and leaving this out means
+      # a change to how verification works never gets verified.
+      - '.github/workflows/setup.yml'
 
 concurrency:
   group: opportunity-finder
