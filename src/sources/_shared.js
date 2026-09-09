@@ -71,10 +71,16 @@ export async function collect({ source, client, actorConfig, queries, options, n
   // Rotated so a budget cut-off does not starve the same tail queries every day.
   const ordered = rotateQueries(queries, rotation);
 
+  // What one query of this source could cost at worst. The actor's own floor decides
+  // the result count, not our config: LinkedIn refuses anything under 150, so a query
+  // there is fifteen times an Indeed query and the budget has to be told so.
+  const worstCaseItems = Math.max(maxItems, Number(actorConfig.input?.minItems ?? 0));
+  const ratePer1k = Number(actorConfig.costPer1kResults ?? budget?.assumedCostPer1k ?? 3.0);
+
   for (const query of ordered) {
     // Checked before the call, because Apify bills on results returned. Checking
     // afterwards, which is what the old cost guard did, is checking after paying.
-    if (budget && !budget.canAfford()) {
+    if (budget && !budget.canAfford({ source, maxItems: worstCaseItems, ratePer1k })) {
       budget.skip();
       skippedForBudget.push(query);
       continue;
@@ -93,7 +99,6 @@ export async function collect({ source, client, actorConfig, queries, options, n
       const reported = Number(meta.costUsd ?? 0);
       // Rates differ per actor: Indeed is about $3/1k, the LinkedIn replacement about
       // $6. A single global assumption would under-count the expensive one by half.
-      const ratePer1k = Number(actorConfig.costPer1kResults ?? budget?.assumedCostPer1k ?? 3.0);
       const estimated = (items.length / 1000) * ratePer1k;
       const billed = reported > 0 ? reported : estimated;
       meta.costUsd = billed;

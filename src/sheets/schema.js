@@ -114,7 +114,7 @@ export const CONFIG_SEED = [
   ['lookback_days', '2', 'How far back to search. First run uses first_run_lookback_days.'],
   ['first_run_lookback_days', '14', 'Used only when the Posts tab is empty.'],
   ['max_items_per_query', '20', 'Per query, per source, per run. Apify bills per result, so this is the main cost dial.'],
-  ['max_apify_cost_per_run', '0.60', 'USD. HARD stop: ingest halts mid-run once spent. ~$18/month daily. This is real money.'],
+  ['max_apify_cost_per_run', '3.00', 'USD per run. HARD stop: ingest halts mid-run once spent. This is real money. The split between sources lives in config/actors.json (runEveryNDays) and config/scoring.json (apify_budget_shares), because a share is a ratio and does not fit in a cell.'],
   ['assumed_cost_per_1k_results', '3.00', 'Used to pre-check a query against the budget before running it. Set to your actual actor rate.'],
   ['running', 'FALSE', 'Mutex. Set by the pipeline; clear it by hand only if a run died.'],
   ['running_since', '', 'ISO timestamp the mutex was taken. Considered stale after 30 minutes.'],

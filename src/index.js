@@ -9,7 +9,7 @@ import { CostMeter } from './providers/anthropic.js';
 import { getLlm } from './providers/llm/index.js';
 import { createGmailClient } from './providers/gmail.js';
 import { runId as makeRunId } from './lib/hash.js';
-import { RunBudget, dayIndex } from './lib/budget.js';
+import { RunBudget, dayIndex, planSources, activeShares, effectiveLookback } from './lib/budget.js';
 import { log, ErrorCollector } from './lib/log.js';
 
 import * as upwork from './sources/upwork.js';
@@ -74,11 +74,11 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
   const startedAt = new Date().toISOString();
   const errors = new ErrorCollector();
   const warnings = [];
-  const meter = new CostMeter(backend);
   const counts = { new_posts: 0, prefiltered: 0, classified: 0, gated: 0, enriched: 0, drafted: 0, sent: 0 };
   const sourceStats = {};
 
   const { backend, gmailConfigured } = preflight();
+  const meter = new CostMeter(backend);
 
   const files = await loadConfigFiles(root);
   const store = await createSheetsClient();
@@ -127,27 +127,46 @@ export async function run({ dryRun = false, skipSend = false, root = ROOT } = {}
       const apify = createApifyClient();
       const collected = [];
 
+      const rotation = dayIndex();
+
+      // Which sources actually run today. Settled before the budget exists, so the
+      // shares are split between the sources that can spend them instead of reserving
+      // a slice for one that will not run.
+      const schedule = planSources(Object.keys(SOURCES), files.actors, rotation);
+      const activeNames = schedule.filter((s) => s.active).map((s) => s.name);
+
       // A hard ceiling checked before every query. Apify bills per result, so a cap
       // applied after ingest is a cap applied after paying.
       budget = new RunBudget({
         capUsd: Number(config.max_apify_cost_per_run ?? 0.6),
         assumedCostPer1k: Number(config.assumed_cost_per_1k_results ?? 3.0),
         maxItemsPerQuery: Number(config.max_items_per_query ?? 20),
+        shares: activeShares(config.apify_budget_shares ?? files.scoring.apify_budget_shares, activeNames),
       });
-      const rotation = dayIndex();
-      log.info('apify budget', { cap_usd: budget.capUsd, rotation });
+      log.info('apify budget', {
+        cap_usd: budget.capUsd, rotation, active: activeNames, shares: budget.shares,
+      });
 
-      for (const [name, source] of Object.entries(SOURCES)) {
+      for (const { name, active, reason, everyNDays } of schedule) {
         const actorConfig = files.actors[name];
+        if (!active) {
+          sourceStats[name] = { posts: 0, failed: false, skipped: true, reason, queryStats: [], costUsd: 0 };
+          // Deferred by cadence is normal and cheap to say; blocked or misconfigured is
+          // the kind of silence that hides a dead source for weeks, so both are said.
+          warnings.push(`${name}: not run this time. ${reason}`);
+          log.info('source skipped', { source: name, reason });
+          continue;
+        }
         try {
-          if (!actorConfig?.actorId) throw new Error(`config/actors.json has no actorId for ${name}`);
-          const result = await source.fetch({
+          const result = await SOURCES[name].fetch({
             client: apify,
             actorConfig,
             queryConfig: files.queries,
             options: {
               maxItems: Number(config.max_items_per_query ?? 20),
-              lookbackDays,
+              // A source running every other day has to look back over the days it sat
+              // out, or a failed run loses a day of postings permanently.
+              lookbackDays: effectiveLookback(lookbackDays, everyNDays),
               timeoutSecs: Number(config.actor_timeout_secs ?? 300),
             },
             budget,

@@ -14,21 +14,24 @@
   ],
   "upwork": {
     "actorId": "devcake/upwork-jobs-scraper",
-    "verified": false,
+    "verified": true,
     "alternates": [
       "chronometrica/upwork-job-scraper",
       "josrade/upwork-jobs-scraper",
       "neatrat/upwork-job-scraper"
     ],
     "input": {
-      "template": {},
+      "template": {
+        "sort": "recency+desc"
+      },
       "fields": {
-        "query": null,
+        "query": "searchQueries",
         "maxItems": "maxItems",
         "remote": null,
         "postedWithinDays": null
       },
-      "minItems": 20
+      "minItems": 20,
+      "queryIsList": true
     },
     "map": {
       "url": [
@@ -84,26 +87,28 @@
       "comp_type": "unknown"
     },
     "probe_note": "Rejects maxItems < 20 with a 400.",
-    "costPer1kResults": 2.5,
-    "verified_at": "2026-09-07, ran but returned unrelated results; query field corrected from searchQuery to queries",
+    "costPer1kResults": 0.0025,
+    "verified_at": "2026-09-09, schema read from build 1.0.24. searchQueries confirmed as the search field.",
     "unmapped_knobs": {
-      "note": "Documented on the actor but not wired up. Budget Range is the interesting one: filtering low budgets at the source would stop us paying for $5 postings at all.",
+      "note": "Declared but not wired. budget is the interesting one: filtering low budgets at the source would stop us paying for $5 postings at all. Its enum values are not printed by the probe, so wiring it is a separate change with its own verification.",
       "available": [
-        "Job Type",
-        "Experience Level",
-        "Workload",
-        "Project Duration",
-        "Budget Range",
-        "Client Hiring History"
+        "jobType",
+        "experienceLevel",
+        "workload",
+        "duration",
+        "budget",
+        "clientHires"
       ]
     },
-    "blocked": "Input field names unknown. searchQuery and queries were both accepted and silently ignored (\"No queries provided, fetching all jobs\"), so every run returns arbitrary listings. Waiting on the schema dump from the next probe."
+    "schema_notes": "Declared inputs: searchQueries (array), maxItems, sort (relevance+desc | recency+desc | spend+desc), jobType, experienceLevel, workload, duration, budget, clientHires, proxyConfiguration. There is no recency input, hence sort=recency+desc plus a client-side window. Two guesses failed before this: searchQuery and queries were both accepted and silently ignored.",
+    "mapping_notes": "Upwork returns no company name and no location: both were NO HIT across every probe, and that is a property of the source, not a mapping gap. Postings are client-anonymous until you apply.",
+    "pricing_note": "Measured, not assumed: two probe runs each billed $0.00005 for twenty results, which is $0.0025 per thousand. Effectively free, so the pre-check reserves almost nothing and every query runs. If the actor ever starts charging properly the global cap still catches it after one query."
   },
   "linkedin": {
     "actorId": "cheap_scraper/linkedin-job-scraper",
     "verified": false,
-    "costPer1kResults": 6.0,
-    "pricing_note": "Pay per result, and dedupes server-side. Third LinkedIn actor tried: the first was a rental, the second is retired.",
+    "costPer1kResults": 6,
+    "pricing_note": "Pay per result, dedupes server-side, and refuses maxItems below 150. At the assumed $6/1k that is up to $0.90 for one query against a $3.00 run cap, so it runs every other day on a 40% share rather than daily. costPer1kResults is inherited from the retired smorgi_apps actor and is still a guess; the first real run replaces it with the reported figure.",
     "alternates": [
       "magicfingers/linkedin-jobs-scraper",
       "curious_coder/linkedin-jobs-scraper",
@@ -116,7 +121,10 @@
     },
     "input": {
       "template": {
-        "saveOnlyUniqueItems": true
+        "saveOnlyUniqueItems": true,
+        "locations": [
+          "United States"
+        ]
       },
       "fields": {
         "query": "keyword",
@@ -218,8 +226,10 @@
     "defaults": {
       "comp_type": "salary"
     },
-    "blocked": "Enforces maxItems >= 150 per query. At roughly $6/1k that is about $0.90 a query against a $0.60 cap for the whole run, so the budget guard would refuse every query and the source would silently never run. Needs a cost decision.",
-    "schema_notes": "Rich schema. Useful and safe: publishedAt (r86400/r604800/r2592000), jobTitleExclude, excludeRecruitingAgencies, companySizeMin/Max, workType. salaryBase (enum up to 120000) matches the salary floor exactly but is NOT wired on purpose: LinkedIn salary filters act on stated salary, so it would drop every posting that omits pay, which is most of the good ones, and that contradicts the rule that missing compensation never rejects."
+    "schema_notes": "Rich schema. keyword is an array and is NOT sufficient on its own: the actor refuses to build a search URL from keywords alone and exits with zero results, billing nothing. It needs at least one location, hence locations: [\"United States\"] in the template. Also useful and safe: publishedAt (r86400/r604800/r2592000), jobTitleExclude, excludeRecruitingAgencies, companySizeMin/Max, workType. workType would filter to remote at source but its accepted values are not printed by the probe, so remote stays a client-side judgement rather than a third guess. salaryBase offers an enum topping out at exactly the 120000 salary floor and is deliberately NOT wired: LinkedIn salary filters act on stated salary, so it would drop every posting that omits pay, which is most of the good ones, and never rejecting on missing compensation is a rule this pipeline is built around.",
+    "runEveryNDays": 2,
+    "cadence_note": "Every other day. Salaried postings turn over slowly and Indeed covers the same market daily, so the lost freshness is small and the halved cost is not. The lookback widens by the skipped day automatically, so a failed run cannot lose a day of postings.",
+    "verified_at": "2026-09-09, schema read from build 0.0.48. Ran clean and returned zero items for keyword-without-location, at a cost of $0."
   },
   "indeed": {
     "actorId": "misceres/indeed-scraper",
@@ -302,7 +312,7 @@
       "comp_type": "salary"
     },
     "verified_at": "2026-09-09, schema read from build 0.0.108",
-    "costPer1kResults": 3.0,
+    "costPer1kResults": 3,
     "schema_notes": "Declared inputs: position, maxItemsPerSearch, country, location, parseCompanyDetails, saveOnlyUniqueItems, followApplyRedirects, startUrls. We had been sending maxItems and maxDaysOld, neither of which is declared. There is no recency input at all, so freshness is client-side only and daily runs will re-fetch the same top results. That is the duplicate billing the spend report tracks."
   }
 }

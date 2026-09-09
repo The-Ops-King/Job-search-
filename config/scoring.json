@@ -5,7 +5,7 @@
   "fit_score_gate": 7,
   "max_sends_per_day": 15,
   "max_enrichments_per_run": 25,
-  "max_daily_cost": 12.0,
+  "max_daily_cost": 12,
   "lookback_days": 2,
   "first_run_lookback_days": 14,
   "max_items_per_query": 20,
@@ -15,6 +15,11 @@
   ],
   "pause": false,
   "prefilter_enabled": true,
-  "max_apify_cost_per_run": 0.6,
-  "assumed_cost_per_1k_results": 3.0
+  "max_apify_cost_per_run": 3,
+  "assumed_cost_per_1k_results": 3,
+  "apify_budget_shares": {
+    "linkedin": 0.55,
+    "indeed": 0.4,
+    "upwork": 0.05
+  }
 }

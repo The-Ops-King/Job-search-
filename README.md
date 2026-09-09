@@ -16,13 +16,14 @@ up from it. Re-running the same day adds no rows and sends no second email.
 
 ## What it costs to run
 
-About $18 a month, all of it Apify, and it is capped so it cannot go higher without
-you raising the cap.
+At most $90 a month, all of it Apify, and it is capped per run so it cannot go higher
+without you raising the cap. Most runs will cost well under the cap, because two of the
+three sources are cheap and the third only runs every other day.
 
 | | |
 | --- | --- |
 | Claude | $0. Runs on a Claude subscription through headless Claude Code |
-| Apify | capped at `max_apify_cost_per_run`, $0.60 default, $18 a month daily |
+| Apify | capped at `max_apify_cost_per_run`, $3.00 a run, so at most $90 a month daily |
 | Google Sheets | $0 |
 | GitHub Actions | $0. Public repo is unlimited; a private repo gets 2,000 minutes a month, and the Apify budget cap keeps runs short enough to stay inside that |
 | Email | $0, because sending is off |
@@ -61,12 +62,15 @@ deletes or reorders what is already there.
 
 ## Before the first real run: verify the actors
 
-**No actor id or field name in `config/actors.json` has been verified.** apify.com was
-unreachable from the environment this was built in, so the mappings are educated
-guesses and the fixtures under `test/fixtures/` are hand-authored rather than captured
-from live runs.
+All three actors have now been probed against live runs, and every input field name in
+`config/actors.json` comes from the actor's own declared input schema rather than from
+a guess. Indeed and Upwork have returned real, correctly mapped results. LinkedIn has
+had its schema read and its inputs corrected but has not yet returned a result, so it
+is the one still to prove.
 
-Fix that first:
+Guessing input field names failed three times before the probe started reading schemas.
+An undeclared input is not rejected: the actor accepts it, ignores it, and returns
+plausible-looking rubbish. Re-probe after any mapping change:
 
 ```bash
 npm run probe-actor -- indeed "sales operations"
@@ -211,12 +215,16 @@ the next one.
 
 ## Cost control
 
-Four limits, all editable in the Config tab:
+Six limits. Four are editable in the Config tab:
 
 - `max_items_per_query` bounds what the actors return
 - `max_enrichments_per_run` bounds vendor spend on a bad query day
 - `max_daily_cost` stops the run before enrichment if the estimate is already over
 - `max_sends_per_day` bounds outbound volume
+
+Two more are structural and live in the config files, because a ratio and a cadence do
+not fit in a cell: `apify_budget_shares` in `config/scoring.json` and `runEveryNDays`
+per source in `config/actors.json`. Both are explained under Apify below.
 
 `api_cost_estimate` in the Runs row means different things per backend, and the digest
 says which. On `api` it is real dollars. On `claude_code` there is no bill at all and
@@ -230,10 +238,33 @@ Apify charges per result, and dedupe runs after billing. A posting matching four
 your queries is paid for four times and kept once, which is invisible in a total.
 
 **`max_apify_cost_per_run` is a hard stop, checked before every single query.** Once
-the budget for a run is spent, ingest halts. It defaults to $0.60, which is $18 a month
-running daily, and it cannot be exceeded by more than one query's worth: real cost is
-only known after a query returns, so each one is pre-checked against
-`assumed_cost_per_1k_results` first.
+the budget for a run is spent, ingest halts. It is $3.00, which is $90 a month at the
+very worst running daily, and it cannot be exceeded by more than one query's worth:
+real cost is only known after a query returns, so each one is pre-checked against the
+actor's own rate first.
+
+### Why the budget is split per source, and why LinkedIn runs every other day
+
+The three actors do not cost remotely the same. Upwork bills about $0.0025 per thousand
+results, which is nothing. Indeed is around $3. LinkedIn's actor refuses to return fewer
+than 150 results per query at roughly $6 per thousand, so one LinkedIn query is about
+$0.90, fifteen times an Indeed query.
+
+A single first-come-first-served pot would let LinkedIn spend the entire run budget
+before Indeed ran at all, and Indeed is the verified source. So the cap is split by
+`apify_budget_shares` in `config/scoring.json`, and a source cannot borrow from
+another's slice.
+
+Shares are normalized across the sources actually running. A source that is blocked, or
+not scheduled today, releases its slice to the others rather than leaving it idle, so on
+the days LinkedIn sits out Indeed gets almost the whole cap.
+
+LinkedIn carries `runEveryNDays: 2` in `config/actors.json`. Salaried postings turn over
+slowly and Indeed covers the same market daily, so the freshness lost is small and the
+halved cost is not. The cadence is keyed off the calendar day number rather than a
+counter, so a failed or skipped run cannot drift it, and the lookback widens
+automatically by the days a source sat out so a missed run cannot lose a day of
+postings.
 
 This matters because the other cost guard, `max_daily_cost`, runs after ingest and
 before enrichment. For Apify that is too late. By the time it fires, the results are
@@ -243,21 +274,24 @@ When the cap cuts a run short the remaining queries are deferred, not dropped. Q
 order rotates by day, so anything skipped runs first next time and full coverage comes
 back over a couple of runs. The digest says how many were deferred.
 
-Uncapped, the shipped query set would be about $104 a month at $3.00 per thousand
-(58 queries at 20 results each). The cap is what keeps that from happening; raise it
-deliberately if you want more coverage per run.
+Uncapped, the shipped query set would run to roughly $250 a month, most of it LinkedIn
+at its 150-result floor. The cap and the shares are what keep that from happening; raise
+them deliberately if you want more coverage per run.
 
 Every run also reports what each query cost, which returned nothing, which hit the
 result cap, and the cost per post that survived dedupe. Read that block in the first
 digest before tuning anything, because the levers below should be aimed with data:
 
-1. Map a recency filter for Upwork. `config/actors.json` currently has
-   `postedWithinDays: null` there, so Upwork refetches its full cap daily regardless of
-   age and dedupe discards nearly all of it after you have paid. Whether the actor
-   supports one is a `probe-actor` question.
-2. Cut the 18 shared queries down. They overlap heavily, and overlap is billed.
+1. Wire Upwork's `budget` filter. It is declared on the actor but its accepted values
+   are not printed by the probe, so it needs its own verification run. Filtering low
+   budgets at source would stop us paying for $5 postings and then rejecting them.
+2. Cut the 18 shared queries down. They overlap heavily, and overlap is billed. Several
+   of them are freelance terms that will find nothing on LinkedIn Jobs while still
+   costing a query.
 3. Lower `max_items_per_query` further.
-4. Run LinkedIn and Indeed less often than Upwork. Salaried roles turn over slowly.
+4. Raise `runEveryNDays` on Indeed too, if its duplicate rate turns out high. Neither
+   Indeed nor Upwork has a server-side recency filter, so both refetch their full cap
+   every run and dedupe discards it after you have paid.
 
 ## Layout
 
